@@ -1,0 +1,16 @@
+{
+  "firstName": "Admin",
+  "lastName": "Attempt",
+  "email": "admin@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0006",
+  "dateOfBirth": "1985-04-12",
+  "role": "ADMIN",
+  "address": {
+    "streetAddress": "500 Georgia St",
+    "city": "Vancouver",
+    "province": "British Columbia",
+    "postalCode": "V6B 4Y1",
+    "country": "Canada"
+  }
+}
