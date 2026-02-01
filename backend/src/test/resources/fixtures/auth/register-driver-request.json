@@ -1,0 +1,16 @@
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "driver@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0001",
+  "dateOfBirth": "1995-06-15",
+  "role": "DRIVER",
+  "address": {
+    "streetAddress": "456 Granville St",
+    "city": "Vancouver",
+    "province": "British Columbia",
+    "postalCode": "V6C 1T2",
+    "country": "Canada"
+  }
+}

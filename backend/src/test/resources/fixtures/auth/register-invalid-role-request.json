@@ -1,0 +1,16 @@
+{
+  "firstName": "Bad",
+  "lastName": "Role",
+  "email": "invalid@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0005",
+  "dateOfBirth": "1997-11-30",
+  "role": "BLAH",
+  "address": {
+    "streetAddress": "400 Burrard St",
+    "city": "Vancouver",
+    "province": "British Columbia",
+    "postalCode": "V6C 3A6",
+    "country": "Canada"
+  }
+}
