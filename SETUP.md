@@ -5,6 +5,7 @@
 - **Docker Desktop** must be installed and running ([download here](https://www.docker.com/products/docker-desktop/))
 - **Java 17+** (JDK)
 - **Maven 3.8+**
+- **Node.js 18+** and **npm 9+**
 
 ## Step by step
 
@@ -38,8 +39,19 @@ mvn spring-boot:run
 
 The server starts on `http://localhost:8080`.
 
+### 4. Start the frontend
+
+```bash
+cd frontend/
+npm install
+npm run dev
+```
+
+The app starts on `http://localhost:5173` and proxies API requests to the backend.
+
 ## Verify everything works
 
+- **Frontend:** `http://localhost:5173` (should show the home page)
 - **Backend API:** `POST http://localhost:8080/api/auth/login` (should return a validation error)
 - **MailHog UI:** `http://localhost:8025` (should show an empty inbox)
 
@@ -66,4 +78,5 @@ The backend automatically creates test users on startup:
 
 - **Port 3306 already in use:** Stop any local MySQL instance or change the port in `docker-compose.yml` and `backend/src/main/resources/application.properties`.
 - **Port 8080 already in use:** Another app is using it. Kill the process or change `server.port` in `application.properties`.
+- **Port 5173 already in use:** Another Vite dev server is running. Kill it or Vite will auto-select the next available port.
 - **MySQL connection refused:** Wait a few more seconds and retry. Check `docker compose logs mysql` for errors.
