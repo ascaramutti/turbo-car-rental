@@ -1,0 +1,9 @@
+{
+  "firstName": "Mike",
+  "lastName": "Test",
+  "email": "lower@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0003",
+  "dateOfBirth": "1998-01-10",
+  "role": "driver"
+}

@@ -1,0 +1,9 @@
+{
+  "firstName": "Sarah",
+  "lastName": "Smith",
+  "email": "owner@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0002",
+  "dateOfBirth": "1990-03-20",
+  "role": "CAR_OWNER"
+}
