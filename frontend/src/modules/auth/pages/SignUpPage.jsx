@@ -12,6 +12,7 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const INPUT_BASE = 'w-full px-4 py-3 border-2 rounded-lg bg-bg-light focus:bg-white focus:outline-none focus:ring-2 transition-colors';
+const DATE_PLACEHOLDER = '[color-scheme:light] [&:not(:focus)]:text-gray-400';
 const INPUT_NORMAL = `${INPUT_BASE} border-border focus:ring-accent-orange/30 focus:border-accent-orange`;
 const INPUT_ERROR = `${INPUT_BASE} border-danger focus:ring-danger/30 focus:border-danger`;
 
@@ -28,6 +29,11 @@ export default function SignUpPage() {
     password: '',
     confirmPassword: '',
     role: preselectedRole,
+    streetAddress: '',
+    city: '',
+    province: 'British Columbia',
+    postalCode: '',
+    country: 'Canada',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -41,6 +47,8 @@ export default function SignUpPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
   };
+
+  const ADDRESS_FIELDS = new Set(['streetAddress', 'city', 'province', 'postalCode', 'country']);
 
   /** Validates a single field on blur for immediate feedback. */
   const handleBlur = (e) => {
@@ -90,6 +98,11 @@ export default function SignUpPage() {
       newErrors.phoneNumber = 'Invalid phone number format';
     }
 
+    ADDRESS_FIELDS.forEach((field) => {
+      const err = validateField(field, formData[field]);
+      if (err) newErrors[field] = err;
+    });
+
     if (!role) newErrors.role = 'Please select a role';
 
     setErrors(newErrors);
@@ -102,7 +115,11 @@ export default function SignUpPage() {
 
     setIsLoading(true);
     try {
-      const { confirmPassword: _, ...submitData } = formData;
+      const { confirmPassword: _, streetAddress, city, province, postalCode, country, ...rest } = formData;
+      const submitData = {
+        ...rest,
+        address: { streetAddress, city, province, postalCode, country },
+      };
       if (!submitData.phoneNumber) delete submitData.phoneNumber;
       await register(submitData);
       toast.success('Check your email for the verification code.');
@@ -158,7 +175,7 @@ export default function SignUpPage() {
               type="date" name="dateOfBirth" value={formData.dateOfBirth}
               onChange={handleChange} onBlur={handleBlur}
               max={new Date().toISOString().split('T')[0]}
-              className={errors.dateOfBirth ? INPUT_ERROR : INPUT_NORMAL}
+              className={`${errors.dateOfBirth ? INPUT_ERROR : INPUT_NORMAL} ${!formData.dateOfBirth ? DATE_PLACEHOLDER : ''}`}
             />
             {errors.dateOfBirth && <p className="mt-1 text-xs text-danger">{errors.dateOfBirth}</p>}
           </fieldset>
@@ -173,6 +190,62 @@ export default function SignUpPage() {
               className={errors.phoneNumber ? INPUT_ERROR : INPUT_NORMAL}
             />
             {errors.phoneNumber && <p className="mt-1 text-xs text-danger">{errors.phoneNumber}</p>}
+          </fieldset>
+
+          {/* Address */}
+          <fieldset>
+            <legend className="text-sm font-bold text-driver-blue mb-2">Address</legend>
+            <div className="space-y-3">
+              <div>
+                <input
+                  type="text" name="streetAddress" value={formData.streetAddress}
+                  onChange={handleChange} onBlur={handleBlur}
+                  placeholder="Street Address"
+                  className={errors.streetAddress ? INPUT_ERROR : INPUT_NORMAL}
+                />
+                {errors.streetAddress && <p className="mt-1 text-xs text-danger">{errors.streetAddress}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <input
+                    type="text" name="city" value={formData.city}
+                    onChange={handleChange} onBlur={handleBlur}
+                    placeholder="City"
+                    className={errors.city ? INPUT_ERROR : INPUT_NORMAL}
+                  />
+                  {errors.city && <p className="mt-1 text-xs text-danger">{errors.city}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text" name="province" value={formData.province}
+                    onChange={handleChange} onBlur={handleBlur}
+                    placeholder="Province"
+                    className={`${errors.province ? INPUT_ERROR : INPUT_NORMAL} bg-gray-100`}
+                    readOnly
+                  />
+                  {errors.province && <p className="mt-1 text-xs text-danger">{errors.province}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text" name="postalCode" value={formData.postalCode}
+                    onChange={handleChange} onBlur={handleBlur}
+                    placeholder="V6B 1A1"
+                    className={errors.postalCode ? INPUT_ERROR : INPUT_NORMAL}
+                  />
+                  {errors.postalCode && <p className="mt-1 text-xs text-danger">{errors.postalCode}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text" name="country" value={formData.country}
+                    onChange={handleChange} onBlur={handleBlur}
+                    placeholder="Country"
+                    className={`${errors.country ? INPUT_ERROR : INPUT_NORMAL} bg-gray-100`}
+                    readOnly
+                  />
+                  {errors.country && <p className="mt-1 text-xs text-danger">{errors.country}</p>}
+                </div>
+              </div>
+            </div>
           </fieldset>
 
           {/* Email */}

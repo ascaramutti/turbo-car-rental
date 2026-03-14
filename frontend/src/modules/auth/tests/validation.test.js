@@ -89,6 +89,51 @@ describe('validateField', () => {
     });
   });
 
+  describe('streetAddress', () => {
+    it('returns error for empty street address', () => {
+      expect(validateField('streetAddress', '')).toBe('Street address is required');
+    });
+
+    it('returns error for SQL injection characters', () => {
+      expect(validateField('streetAddress', "'; DROP TABLE;")).toBeTruthy();
+    });
+
+    it('returns null for valid street addresses', () => {
+      expect(validateField('streetAddress', '456 Granville St')).toBeNull();
+      expect(validateField('streetAddress', '100-B King Rd. #5')).toBeNull();
+    });
+  });
+
+  describe('city', () => {
+    it('returns error for empty city', () => {
+      expect(validateField('city', '')).toBe('City is required');
+    });
+
+    it('returns error for city with numbers', () => {
+      expect(validateField('city', 'Vancouver123')).toBeTruthy();
+    });
+
+    it('returns null for valid cities', () => {
+      expect(validateField('city', 'Vancouver')).toBeNull();
+      expect(validateField('city', 'North Vancouver')).toBeNull();
+    });
+  });
+
+  describe('postalCode', () => {
+    it('returns error for empty postal code', () => {
+      expect(validateField('postalCode', '')).toBe('Postal code is required');
+    });
+
+    it('returns error for US zip format', () => {
+      expect(validateField('postalCode', '90210')).toBe('Invalid postal code format (e.g. V6B 1A1)');
+    });
+
+    it('returns null for valid Canadian postal codes', () => {
+      expect(validateField('postalCode', 'V6C 1T2')).toBeNull();
+      expect(validateField('postalCode', 'V6C1T2')).toBeNull();
+    });
+  });
+
   describe('otp', () => {
     it('returns error for empty otp', () => {
       expect(validateField('otp', '')).toBe('OTP code is required');

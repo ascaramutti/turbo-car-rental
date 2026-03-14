@@ -14,6 +14,11 @@ describe('SignUpPage', () => {
     expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Min. 6 characters')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Re-enter password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Street Address')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('V6B 1A1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('British Columbia')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Canada')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /driver/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /car owner/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
@@ -100,6 +105,9 @@ describe('SignUpPage', () => {
     expect(screen.getByText('Email is required')).toBeInTheDocument();
     expect(screen.getByText('Password is required')).toBeInTheDocument();
     expect(screen.getByText('Please confirm your password')).toBeInTheDocument();
+    expect(screen.getByText('Street address is required')).toBeInTheDocument();
+    expect(screen.getByText('City is required')).toBeInTheDocument();
+    expect(screen.getByText('Postal code is required')).toBeInTheDocument();
     expect(screen.getByText('Please select a role')).toBeInTheDocument();
   });
 
@@ -117,6 +125,49 @@ describe('SignUpPage', () => {
     await user.type(firstNameInput, 'John');
 
     expect(screen.queryByText('Only letters, accents, apostrophes, and hyphens allowed')).not.toBeInTheDocument();
+  });
+
+  it('shows error on blur for invalid postal code format', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SignUpPage />);
+
+    const postalInput = screen.getByPlaceholderText('V6B 1A1');
+    await user.type(postalInput, '90210');
+    await user.tab();
+
+    expect(screen.getByText('Invalid postal code format (e.g. V6B 1A1)')).toBeInTheDocument();
+  });
+
+  it('shows error on blur for street address with SQL injection', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SignUpPage />);
+
+    const streetInput = screen.getByPlaceholderText('Street Address');
+    await user.type(streetInput, "'; DROP TABLE;");
+    await user.tab();
+
+    expect(screen.getByText(/only letters, numbers, spaces/i)).toBeInTheDocument();
+  });
+
+  it('shows error on blur for city with numbers', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SignUpPage />);
+
+    const cityInput = screen.getByPlaceholderText('City');
+    await user.type(cityInput, 'Vancouver123');
+    await user.tab();
+
+    expect(screen.getByText(/only letters, spaces, dots/i)).toBeInTheDocument();
+  });
+
+  it('province and country are pre-filled and read-only', () => {
+    renderWithProviders(<SignUpPage />);
+
+    const provinceInput = screen.getByDisplayValue('British Columbia');
+    const countryInput = screen.getByDisplayValue('Canada');
+
+    expect(provinceInput).toHaveAttribute('readOnly');
+    expect(countryInput).toHaveAttribute('readOnly');
   });
 
   it('has a link to the login page', () => {
