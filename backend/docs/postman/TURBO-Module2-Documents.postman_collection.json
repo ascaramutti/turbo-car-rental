@@ -1,0 +1,345 @@
+{
+  "info": {
+    "name": "TURBO - Module 2 (Document Verification)",
+    "description": "API tests for Driver document upload and Admin verification.\n\n**Setup:** Run 'Login Driver' and 'Login Admin' first to get JWT tokens.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "driverToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "ownerToken", "value": "" },
+    { "key": "documentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Login Driver",
+          "event": [{ "listen": "test", "script": { "exec": ["var json = pm.response.json();", "pm.collectionVariables.set('driverToken', json.token);"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"driver@turbo.com\",\"password\":\"driver123\"}" }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [{ "listen": "test", "script": { "exec": ["var json = pm.response.json();", "pm.collectionVariables.set('adminToken', json.token);"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"admin@turbo.com\",\"password\":\"admin123\"}" }
+          }
+        },
+        {
+          "name": "Login Owner",
+          "event": [{ "listen": "test", "script": { "exec": ["var json = pm.response.json();", "pm.collectionVariables.set('ownerToken', json.token);"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"email\":\"owner@turbo.com\",\"password\":\"owner123\"}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Happy Paths",
+      "item": [
+        {
+          "name": "Upload DRIVERS_LICENSE",
+          "event": [{ "listen": "test", "script": { "exec": ["var json = pm.response.json();", "pm.collectionVariables.set('documentId', json.documentId);", "pm.test('Status 200', () => pm.response.to.have.status(200));", "pm.test('Status PENDING', () => pm.expect(json.status).to.eql('PENDING'));"] } }],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/driver/documents/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "documentType", "type": "text", "value": "DRIVERS_LICENSE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload STUDY_PERMIT",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/driver/documents/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "documentType", "type": "text", "value": "STUDY_PERMIT" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Documents",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/driver/documents/my",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }]
+          }
+        },
+        {
+          "name": "Admin - Get Pending Documents",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/documents/pending",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          }
+        },
+        {
+          "name": "Admin - Get Documents by User",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/admin/documents/user/2",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          }
+        },
+        {
+          "name": "Admin - Approve License (CLASS_4)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"APPROVE\",\"licenseClass\":\"CLASS_4\"}" }
+          }
+        },
+        {
+          "name": "Admin - Approve License (CLASS_5)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"APPROVE\",\"licenseClass\":\"CLASS_5\"}" }
+          }
+        },
+        {
+          "name": "Admin - Approve Study Permit",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/2/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"APPROVE\"}" }
+          }
+        },
+        {
+          "name": "Admin - Reject Document",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"REJECT\",\"rejectionReason\":\"Document is blurry and unreadable. Please upload a clearer photo.\"}" }
+          }
+        },
+        {
+          "name": "Reupload Rejected Document",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/driver/documents/{{documentId}}/reupload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Unhappy Paths",
+      "item": [
+        {
+          "name": "DOC-001: Invalid file format (.docx)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/driver/documents/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "documentType", "type": "text", "value": "DRIVERS_LICENSE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DOC-003: Invalid document type (INSURANCE)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/driver/documents/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "documentType", "type": "text", "value": "INSURANCE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DOC-004: Duplicate upload (already pending/approved)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/driver/documents/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "documentType", "type": "text", "value": "DRIVERS_LICENSE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DOC-005: Reupload approved document",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/driver/documents/{{documentId}}/reupload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DOC-007: Document not found",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/driver/documents/999/reupload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{driverToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DOC-008: Reject without reason",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"REJECT\"}" }
+          }
+        },
+        {
+          "name": "DOC-009: Approve license without class",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"APPROVE\"}" }
+          }
+        },
+        {
+          "name": "DOC-010: Review already approved document",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"APPROVE\",\"licenseClass\":\"CLASS_4\"}" }
+          }
+        },
+        {
+          "name": "VALIDATION: Invalid action pattern (SQL injection)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"'; DROP TABLE users;--\"}" }
+          }
+        },
+        {
+          "name": "VALIDATION: Invalid licenseClass pattern",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"APPROVE\",\"licenseClass\":\"'; DROP TABLE;--\"}" }
+          }
+        },
+        {
+          "name": "VALIDATION: SQL injection in rejection reason",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/admin/documents/{{documentId}}/review",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"action\":\"REJECT\",\"rejectionReason\":\"'; DROP TABLE users;--\"}" }
+          }
+        },
+        {
+          "name": "403: Owner tries driver endpoint",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/driver/documents/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "documentType", "type": "text", "value": "DRIVERS_LICENSE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "401: No authentication",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/driver/documents/my"
+          }
+        }
+      ]
+    }
+  ]
+}

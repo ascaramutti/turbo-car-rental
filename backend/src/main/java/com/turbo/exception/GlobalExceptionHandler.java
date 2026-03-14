@@ -1,5 +1,6 @@
 package com.turbo.exception;
 
+import com.turbo.exception.error.DocumentErrorCode;
 import com.turbo.exception.error.ErrorCode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -8,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -52,6 +54,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
         return buildErrorResponse(BAD_CREDENTIALS_CODE, BAD_CREDENTIALS_MESSAGE, HttpStatus.UNAUTHORIZED);
+    }
+
+    /** Handles file upload size exceeded (Spring multipart limit). */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        DocumentErrorCode errorCode = DocumentErrorCode.FILE_TOO_LARGE;
+        return buildErrorResponse(errorCode.getCode(), errorCode.getMessage(), errorCode.getHttpStatus());
     }
 
     /** Catches any unhandled exception as a generic server error. */

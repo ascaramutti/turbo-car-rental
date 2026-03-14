@@ -1,0 +1,593 @@
+openapi: 3.0.3
+info:
+  title: TURBO - Module 2 (Document Verification)
+  description: |
+    API contract for the Document Verification module of the TURBO peer-to-peer car rental platform.
+
+    ## Scope
+    This module handles **Driver personal documents only**. Vehicle documents
+    (insurance, registration, inspection) are handled in Module 3 (Vehicle Catalog)
+    as they are tied to the vehicle entity, not the user.
+
+    ## Document Upload Flow
+    1. Driver authenticates via JWT (Module 1)
+    2. Driver uploads document(s) via `POST /documents/upload`
+    3. System validates file (PDF/JPG, max 5MB) and saves with status=PENDING
+    4. Admin reviews pending documents via `GET /admin/documents/pending`
+    5. Admin approves or rejects via `PUT /admin/documents/{id}/review`
+    6. Driver is verified (`isVerified=true`) only when ALL required documents are APPROVED
+
+    ## Document Types (Driver only)
+    - **DRIVERS_LICENSE:** Required for all drivers
+    - **STUDY_PERMIT:** Required for international students
+
+    ## Verification Rule
+    Driver.isVerified = true ONLY when:
+    - DRIVERS_LICENSE status = APPROVED
+    - STUDY_PERMIT status = APPROVED (if applicable)
+    Until verified, the driver cannot search or book vehicles.
+
+    ## Validation Rules
+    - Allowed formats: PDF, JPG, JPEG, PNG
+    - Max file size: 5MB per file
+    - Upload validation must complete in under 10 seconds
+
+    ## License Classification (Admin Approval)
+    - **Class 4:** Approved for TAXI + DELIVERY services
+    - **Class 5:** Approved for DELIVERY only (requires digital waiver signature)
+  version: 1.0.0
+  contact:
+    name: TURBO Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://localhost/api
+    description: Docker (via nginx)
+
+tags:
+  - name: Documents
+    description: Document upload and retrieval for authenticated drivers (secured by DRIVER role at URL level)
+  - name: Admin Documents
+    description: Admin document review and verification portal
+
+paths:
+  /api/driver/documents/upload:
+    post:
+      tags: [Documents]
+      summary: Upload a document
+      description: |
+        Uploads a document file for the authenticated driver. The file is validated
+        (format and size) and saved with status PENDING for admin review.
+        Only DRIVER role can upload documents in this module.
+        Requires JWT authentication.
+      operationId: uploadDocument
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, documentType]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "PDF, JPG, JPEG, or PNG file. Max 5MB."
+                documentType:
+                  type: string
+                  enum: [DRIVERS_LICENSE, STUDY_PERMIT]
+                  description: "Type of document being uploaded. Only driver document types in this module."
+      responses:
+        '200':
+          description: Document uploaded successfully. Status set to PENDING.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+              example:
+                documentId: 1
+                userId: 5
+                documentType: "DRIVERS_LICENSE"
+                fileName: "license.pdf"
+                fileSize: 2048576
+                status: "PENDING"
+                uploadedAt: "2026-03-14T10:00:00.000"
+        '400':
+          description: Invalid file format, file too large, or missing document type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidFormat:
+                  summary: Unsupported file format (DOC-001)
+                  value:
+                    code: DOC-001
+                    message: "Invalid file format. Only PDF, JPG, JPEG, and PNG are allowed"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                fileTooLarge:
+                  summary: File exceeds 5MB limit (DOC-002)
+                  value:
+                    code: DOC-002
+                    message: "File size exceeds the maximum allowed size of 5MB"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                invalidDocumentType:
+                  summary: Invalid document type (DOC-003)
+                  value:
+                    code: DOC-003
+                    message: "Invalid document type. Only DRIVERS_LICENSE and STUDY_PERMIT are allowed"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                notDriver:
+                  summary: User is not a driver (DOC-011)
+                  value:
+                    code: DOC-011
+                    message: "Only drivers can upload documents in this module"
+                    status: 403
+                    timestamp: "2026-03-14T10:00:00.000"
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: SYS-001
+                message: "An unexpected error occurred"
+                status: 500
+                timestamp: "2026-03-14T10:00:00.000"
+        '409':
+          description: Document of this type already exists and is pending or approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-004
+                message: "A DRIVERS_LICENSE document is already pending review"
+                status: 409
+                timestamp: "2026-03-14T10:00:00.000"
+
+  /api/driver/documents/my:
+    get:
+      tags: [Documents]
+      summary: Get my documents
+      description: |
+        Returns all documents uploaded by the authenticated user.
+        Requires JWT authentication.
+      operationId: getMyDocuments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of user's documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentResponse'
+              example:
+                - documentId: 1
+                  userId: 5
+                  documentType: "DRIVERS_LICENSE"
+                  fileName: "license.pdf"
+                  fileSize: 2048576
+                  status: "APPROVED"
+                  uploadedAt: "2026-03-14T10:00:00.000"
+                  reviewedAt: "2026-03-14T11:30:00.000"
+                - documentId: 2
+                  userId: 5
+                  documentType: "STUDY_PERMIT"
+                  fileName: "study-permit.jpg"
+                  fileSize: 1024000
+                  status: "PENDING"
+                  uploadedAt: "2026-03-14T10:05:00.000"
+        '401':
+          description: Not authenticated
+
+  /api/driver/documents/{id}/reupload:
+    put:
+      tags: [Documents]
+      summary: Re-upload a pending or rejected document
+      description: |
+        Replaces a document with a new file.
+        Allowed when document status is PENDING or REJECTED.
+        Resets status to PENDING for admin review. If the document was already
+        APPROVED, it cannot be replaced.
+      operationId: reuploadDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "PDF, JPG, JPEG, or PNG file. Max 5MB."
+      responses:
+        '200':
+          description: Document re-uploaded. Status reset to PENDING.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Document already approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-005
+                message: "Approved documents cannot be replaced"
+                status: 400
+                timestamp: "2026-03-14T10:00:00.000"
+        '403':
+          description: Document does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-006
+                message: "You do not have permission to modify this document"
+                status: 403
+                timestamp: "2026-03-14T10:00:00.000"
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-007
+                message: "Document not found"
+                status: 404
+                timestamp: "2026-03-14T10:00:00.000"
+
+  # ── Admin Endpoints ─────────────────────────────────────────────
+
+  /api/admin/documents/pending:
+    get:
+      tags: [Admin Documents]
+      summary: Get all pending documents
+      description: |
+        Returns all documents with status PENDING, grouped by user.
+        Only accessible by ADMIN role.
+      operationId: getPendingDocuments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of pending documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminDocumentResponse'
+              example:
+                - documentId: 2
+                  userId: 5
+                  userFullName: "John Doe"
+                  userRole: "DRIVER"
+                  documentType: "DRIVERS_LICENSE"
+                  fileName: "license.pdf"
+                  fileSize: 2048576
+                  status: "PENDING"
+                  uploadedAt: "2026-03-14T10:00:00.000"
+        '403':
+          description: Not an admin
+
+  /api/admin/documents/{id}/review:
+    put:
+      tags: [Admin Documents]
+      summary: Review a document (approve or reject)
+      description: |
+        Admin approves or rejects a pending document.
+
+        **On approval of DRIVERS_LICENSE:**
+        - Admin must provide `licenseClass` (CLASS_4 or CLASS_5)
+        - CLASS_4: Driver approved for TAXI + DELIVERY → sets Driver.licenseClass and Driver.isWorkEligible=true
+        - CLASS_5: Driver approved for DELIVERY only → sets Driver.licenseClass (waiver required)
+        - Driver.isVerified = true ONLY when ALL required documents are APPROVED
+
+        **On approval of STUDY_PERMIT:**
+        - No additional fields required
+        - Updates Driver.studyPermitNumber and studyPermitExpiry from document
+
+        **On rejection:**
+        - Admin must provide `rejectionReason`
+        - Document status changes to REJECTED
+        - Driver can re-upload via PUT /documents/{id}/reupload
+        - Driver remains unverified until all docs are approved
+      operationId: reviewDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDocumentRequest'
+            examples:
+              approveClass4:
+                summary: Approve driver license as Class 4
+                value:
+                  action: "APPROVE"
+                  licenseClass: "CLASS_4"
+              approveClass5:
+                summary: Approve driver license as Class 5
+                value:
+                  action: "APPROVE"
+                  licenseClass: "CLASS_5"
+              approveInsurance:
+                summary: Approve car owner insurance
+                value:
+                  action: "APPROVE"
+              reject:
+                summary: Reject with reason
+                value:
+                  action: "REJECT"
+                  rejectionReason: "Document is blurry and unreadable. Please upload a clearer photo."
+      responses:
+        '200':
+          description: Document reviewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDocumentResponse'
+              example:
+                documentId: 2
+                userId: 5
+                userFullName: "John Doe"
+                userRole: "DRIVER"
+                documentType: "DRIVERS_LICENSE"
+                fileName: "license.pdf"
+                fileSize: 2048576
+                status: "APPROVED"
+                uploadedAt: "2026-03-14T10:00:00.000"
+                reviewedAt: "2026-03-14T11:30:00.000"
+                reviewedBy: 1
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingReason:
+                  summary: Rejection without reason (DOC-008)
+                  value:
+                    code: DOC-008
+                    message: "Rejection reason is required when rejecting a document"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                missingLicenseClass:
+                  summary: License approval without class (DOC-009)
+                  value:
+                    code: DOC-009
+                    message: "License class is required when approving a driver's license"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                notPending:
+                  summary: Document not pending (DOC-010)
+                  value:
+                    code: DOC-010
+                    message: "Only documents with PENDING status can be reviewed"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+        '403':
+          description: Not an admin
+        '404':
+          description: Document not found
+
+  /api/admin/documents/user/{userId}:
+    get:
+      tags: [Admin Documents]
+      summary: Get all documents for a specific user
+      description: |
+        Returns all documents uploaded by a specific user.
+        Only accessible by ADMIN role. Used in the verification portal.
+      operationId: getDocumentsByUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: User ID
+      responses:
+        '200':
+          description: List of user's documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminDocumentResponse'
+        '403':
+          description: Not an admin
+        '404':
+          description: User not found
+
+components:
+  schemas:
+    # ── Request DTOs ────────────────────────────────────────────────
+
+    ReviewDocumentRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [APPROVE, REJECT]
+          pattern: "^(APPROVE|REJECT)$"
+          description: "Approval action. Only APPROVE or REJECT allowed."
+        licenseClass:
+          type: string
+          enum: [CLASS_4, CLASS_5]
+          pattern: "^(CLASS_4|CLASS_5)$"
+          nullable: true
+          description: "Required when approving a DRIVERS_LICENSE. CLASS_4=taxi+delivery, CLASS_5=delivery only. Null for other document types."
+        rejectionReason:
+          type: string
+          maxLength: 500
+          pattern: "^[a-zA-Z0-9À-ÿ\\s.,!?()'+:]+$"
+          nullable: true
+          description: "Required when action is REJECT. Letters, numbers, spaces, and basic punctuation only."
+
+    # ── Response DTOs ───────────────────────────────────────────────
+
+    DocumentResponse:
+      type: object
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          example: 1
+        userId:
+          type: integer
+          format: int64
+          example: 5
+        documentType:
+          type: string
+          enum: [DRIVERS_LICENSE, STUDY_PERMIT]
+          example: "DRIVERS_LICENSE"
+        fileName:
+          type: string
+          example: "license.pdf"
+        fileSize:
+          type: number
+          description: "File size in bytes"
+          example: 2048576
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+          example: "PENDING"
+        uploadedAt:
+          type: string
+          format: date-time
+          example: "2026-03-14T10:00:00.000"
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        rejectionReason:
+          type: string
+          nullable: true
+          description: "Only present when status is REJECTED"
+          example: null
+
+    AdminDocumentResponse:
+      type: object
+      description: "Extended document response with user info for admin portal"
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          example: 2
+        userId:
+          type: integer
+          format: int64
+          example: 5
+        userFullName:
+          type: string
+          description: "firstName + lastName of the document owner"
+          example: "John Doe"
+        userRole:
+          type: string
+          enum: [DRIVER]
+          example: "DRIVER"
+        documentType:
+          type: string
+          enum: [DRIVERS_LICENSE, STUDY_PERMIT]
+          example: "DRIVERS_LICENSE"
+        fileName:
+          type: string
+          example: "license.pdf"
+        fileSize:
+          type: number
+          example: 2048576
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+          example: "PENDING"
+        uploadedAt:
+          type: string
+          format: date-time
+          example: "2026-03-14T10:00:00.000"
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reviewedBy:
+          type: integer
+          format: int64
+          nullable: true
+          description: "Admin user ID who reviewed the document"
+        rejectionReason:
+          type: string
+          nullable: true
+
+    # ── Error Responses ─────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      description: Business or system error
+      properties:
+        code:
+          type: string
+          description: "Error code (e.g., DOC-001, SYS-001)"
+          example: DOC-001
+        message:
+          type: string
+          example: "Invalid file format"
+        status:
+          type: integer
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-14T10:00:00.000"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT token obtained from Module 1 /verify-otp or /login"
