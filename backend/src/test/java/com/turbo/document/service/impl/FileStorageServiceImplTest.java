@@ -102,6 +102,35 @@ class FileStorageServiceImplTest {
         }
     }
 
+    // ── load ─────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("load")
+    class Load {
+
+        @Test
+        @DisplayName("Loads existing file as Resource")
+        void load_existingFile_returnsResource() throws IOException {
+            Path file = tempDir.resolve("test.pdf");
+            Files.write(file, "pdf-content".getBytes());
+
+            org.springframework.core.io.Resource resource = fileStorageService.load(file.toString());
+
+            assertThat(resource.exists()).isTrue();
+            assertThat(resource.isReadable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Throws for non-existent file")
+        void load_nonExistentFile_throwsException() {
+            String fakePath = tempDir.resolve("nonexistent.pdf").toString();
+
+            assertThatThrownBy(() -> fileStorageService.load(fakePath))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("not found or not readable");
+        }
+    }
+
     // ── delete ───────────────────────────────────────────────────────
 
     @Nested

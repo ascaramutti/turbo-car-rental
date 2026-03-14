@@ -131,15 +131,17 @@ paths:
                     status: 403
                     timestamp: "2026-03-14T10:00:00.000"
         '401':
-          description: Not authenticated
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '404':
+          description: User not found (edge case — user deleted after login)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
-                code: SYS-001
-                message: "An unexpected error occurred"
-                status: 500
+                code: AUTH-002
+                message: "User not found"
+                status: 404
                 timestamp: "2026-03-14T10:00:00.000"
         '409':
           description: Document of this type already exists and is pending or approved
@@ -189,7 +191,57 @@ paths:
                   status: "PENDING"
                   uploadedAt: "2026-03-14T10:05:00.000"
         '401':
-          description: Not authenticated
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+
+  /api/driver/documents/{id}/file:
+    get:
+      tags: [Documents]
+      summary: Download own document file
+      description: |
+        Returns the actual file (PDF/JPG/PNG) for a document owned by the authenticated driver.
+        Uses Content-Disposition: inline for browser viewing.
+      operationId: downloadDriverFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Document does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-006
+                message: "You do not have permission to modify this document"
+                status: 403
+                timestamp: "2026-03-14T10:00:00.000"
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-007
+                message: "Document not found"
+                status: 404
+                timestamp: "2026-03-14T10:00:00.000"
 
   /api/driver/documents/{id}/reupload:
     put:
@@ -232,16 +284,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocumentResponse'
         '400':
-          description: Document already approved
+          description: Document already approved, or invalid file
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: DOC-005
-                message: "Approved documents cannot be replaced"
-                status: 400
-                timestamp: "2026-03-14T10:00:00.000"
+              examples:
+                alreadyApproved:
+                  summary: Document already approved (DOC-005)
+                  value:
+                    code: DOC-005
+                    message: "Approved documents cannot be replaced"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                invalidFormat:
+                  summary: Invalid file format (DOC-001)
+                  value:
+                    code: DOC-001
+                    message: "Invalid file format. Only PDF, JPG, JPEG, and PNG are allowed"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                fileTooLarge:
+                  summary: File exceeds 5MB (DOC-002)
+                  value:
+                    code: DOC-002
+                    message: "File size exceeds the maximum allowed size of 5MB"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
         '403':
           description: Document does not belong to the authenticated user
           content:
@@ -297,7 +366,7 @@ paths:
                   status: "PENDING"
                   uploadedAt: "2026-03-14T10:00:00.000"
         '403':
-          description: Not an admin
+          description: Not an admin (Spring Security blocks at URL level)
 
   /api/admin/documents/{id}/review:
     put:
@@ -406,10 +475,79 @@ paths:
                     message: "Only documents with PENDING status can be reviewed"
                     status: 400
                     timestamp: "2026-03-14T10:00:00.000"
+                validationError:
+                  summary: Invalid field pattern (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: "Validation Failed"
+                    status: 400
+                    timestamp: "2026-03-14T10:00:00.000"
+                    details:
+                      action: "Review action must be APPROVE or REJECT"
         '403':
-          description: Not an admin
+          description: Not an admin (Spring Security blocks at URL level)
+        '404':
+          description: Document or driver not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                documentNotFound:
+                  summary: Document not found (DOC-007)
+                  value:
+                    code: DOC-007
+                    message: "Document not found"
+                    status: 404
+                    timestamp: "2026-03-14T10:00:00.000"
+                driverNotFound:
+                  summary: Driver not found during license approval (AUTH-002)
+                  value:
+                    code: AUTH-002
+                    message: "User not found"
+                    status: 404
+                    timestamp: "2026-03-14T10:00:00.000"
+
+  /api/admin/documents/{id}/file:
+    get:
+      tags: [Admin Documents]
+      summary: View document file for review
+      description: |
+        Returns the actual file (PDF/JPG/PNG) for admin to review before approving/rejecting.
+        No ownership check — any admin can view any document.
+      operationId: viewAdminFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Not an admin (Spring Security blocks at URL level)
         '404':
           description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-007
+                message: "Document not found"
+                status: 404
+                timestamp: "2026-03-14T10:00:00.000"
 
   /api/admin/documents/user/{userId}:
     get:
@@ -440,9 +578,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/AdminDocumentResponse'
         '403':
-          description: Not an admin
+          description: Not an admin (Spring Security blocks at URL level)
         '404':
           description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-002
+                message: "User not found"
+                status: 404
+                timestamp: "2026-03-14T10:00:00.000"
 
 components:
   schemas:

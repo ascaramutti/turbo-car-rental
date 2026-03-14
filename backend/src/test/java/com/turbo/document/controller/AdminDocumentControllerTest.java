@@ -6,9 +6,14 @@ import com.turbo.document.controller.mapper.AdminDocumentControllerMapper;
 import com.turbo.document.dto.AdminDocumentResponse;
 import com.turbo.document.dto.ReviewDocumentRequest;
 import com.turbo.document.fixture.DocumentFixture;
+import com.turbo.document.model.Document;
 import com.turbo.document.service.DocumentService;
+import com.turbo.document.service.FileStorageService;
 import com.turbo.document.service.command.ReviewDocumentCommand;
+import com.turbo.exception.BusinessException;
 import com.turbo.exception.GlobalExceptionHandler;
+import com.turbo.exception.error.DocumentErrorCode;
+import org.springframework.core.io.ByteArrayResource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -38,6 +43,7 @@ class AdminDocumentControllerTest {
 
     @Mock private DocumentService documentService;
     @Mock private AdminDocumentControllerMapper controllerMapper;
+    @Mock private FileStorageService fileStorageService;
     @Mock private SecurityHelper securityHelper;
 
     @InjectMocks private AdminDocumentController adminDocumentController;
@@ -194,6 +200,37 @@ class AdminDocumentControllerTest {
             mockMvc.perform(get("/api/admin/documents/user/" + DocumentFixture.DRIVER_USER_ID))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[0].userFullName").value("John Doe"));
+        }
+    }
+
+    // ── GET /api/admin/documents/{id}/file ───────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/admin/documents/{id}/file")
+    class ViewFile {
+
+        @Test
+        @DisplayName("Valid file view - returns 200 with file content")
+        void viewFile_validRequest_returns200() throws Exception {
+            Document doc = DocumentFixture.pendingLicense();
+            ByteArrayResource resource = new ByteArrayResource("pdf-content".getBytes());
+
+            when(documentService.getDocumentForAdminView(100L)).thenReturn(doc);
+            when(fileStorageService.load(doc.getFileUrl())).thenReturn(resource);
+
+            mockMvc.perform(get("/api/admin/documents/100/file"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("Document not found - returns 404 with DOC-007")
+        void viewFile_notFound_returns404() throws Exception {
+            when(documentService.getDocumentForAdminView(999L))
+                    .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
+
+            mockMvc.perform(get("/api/admin/documents/999/file"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("DOC-007"));
         }
     }
 }

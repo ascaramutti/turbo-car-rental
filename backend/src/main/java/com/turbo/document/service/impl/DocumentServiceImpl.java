@@ -107,6 +107,18 @@ public class DocumentServiceImpl implements DocumentService {
         return documentServiceMapper.toAdminDocumentResponseList(documentRepository.findByUserUserId(userId));
     }
 
+    @Override
+    public Document getDocumentForDownload(Long documentId, Long userId) {
+        Document document = findDocumentById(documentId);
+        validateOwnership(document, userId);
+        return document;
+    }
+
+    @Override
+    public Document getDocumentForAdminView(Long documentId) {
+        return findDocumentById(documentId);
+    }
+
     // ── Validation helpers ─────────────────────────────────────────
 
     /** Finds a user by ID or throws if not found. */
@@ -177,7 +189,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    /** Parses the review action string or throws if invalid. */
+    /** Parses the review action string. DTO @Pattern already validates, this is defense in depth. */
     private ReviewAction parseReviewAction(String action) {
         try {
             return ReviewAction.valueOf(action.toUpperCase());
@@ -222,7 +234,11 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    /** Checks if all required documents are approved and sets isVerified on the driver. */
+    /**
+     * Checks if all required documents are approved and sets isVerified on the driver.
+     * Rule: DRIVERS_LICENSE must be APPROVED. STUDY_PERMIT must be APPROVED if it exists
+     * (it's optional — if no STUDY_PERMIT was uploaded, it's not required).
+     */
     private void checkAndSetDriverVerification(User user) {
         List<Document> userDocs = documentRepository.findByUserUserId(user.getUserId());
 

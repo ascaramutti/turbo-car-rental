@@ -4,6 +4,8 @@ import com.turbo.document.service.FileStorageService;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,6 +21,10 @@ import java.util.UUID;
 public class FileStorageServiceImpl implements FileStorageService {
 
     private static final String DEFAULT_EXTENSION = "bin";
+    private static final String ERROR_CREATE_DIRECTORY = "Could not create directory: ";
+    private static final String ERROR_STORE_FILE = "Failed to store file: ";
+    private static final String ERROR_LOAD_FILE = "Failed to load file: ";
+    private static final String ERROR_FILE_NOT_READABLE = "File not found or not readable: ";
 
     @Value("${file.upload-dir}")
     private String uploadDir;
@@ -29,7 +35,7 @@ public class FileStorageServiceImpl implements FileStorageService {
         try {
             Files.createDirectories(Paths.get(uploadDir));
         } catch (IOException e) {
-            throw new RuntimeException("Could not create upload directory: " + uploadDir, e);
+            throw new RuntimeException(ERROR_CREATE_DIRECTORY + uploadDir, e);
         }
     }
 
@@ -43,6 +49,20 @@ public class FileStorageServiceImpl implements FileStorageService {
 
         copyFile(file, targetPath);
         return targetPath.toString();
+    }
+
+    @Override
+    public Resource load(String filePath) {
+        try {
+            Path path = Paths.get(filePath);
+            Resource resource = new UrlResource(path.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                throw new RuntimeException(ERROR_FILE_NOT_READABLE + filePath);
+            }
+            return resource;
+        } catch (IOException e) {
+            throw new RuntimeException(ERROR_LOAD_FILE + filePath, e);
+        }
     }
 
     @Override
@@ -60,7 +80,7 @@ public class FileStorageServiceImpl implements FileStorageService {
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
-            throw new RuntimeException("Could not create directory: " + dir, e);
+            throw new RuntimeException(ERROR_CREATE_DIRECTORY + dir, e);
         }
     }
 
@@ -83,7 +103,7 @@ public class FileStorageServiceImpl implements FileStorageService {
         try {
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to store file: " + targetPath, e);
+            throw new RuntimeException(ERROR_STORE_FILE + targetPath, e);
         }
     }
 }

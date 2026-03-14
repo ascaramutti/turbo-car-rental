@@ -27,7 +27,7 @@
 
 ## Module 2 — Document Verification (Driver Documents)
 **Scope:** Driver personal document upload (license + study permit), admin review/approval
-**Endpoints:** POST/GET/PUT /api/driver/documents/*, GET/PUT /api/admin/documents/*
+**Endpoints:** POST/GET/PUT /api/driver/documents/* (upload, my, reupload, file), GET/PUT /api/admin/documents/* (pending, review, user, file)
 **Entities:** Document (with user_id, vehicle_id=null)
 **Key flows:**
 - Driver uploads DRIVERS_LICENSE + STUDY_PERMIT → status=PENDING → Admin reviews

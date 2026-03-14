@@ -59,6 +59,9 @@ Admin
   ├─ GET /api/admin/documents/pending
   │   → Lista de todos los documentos PENDING con datos del usuario
   │
+  ├─ GET /api/admin/documents/{id}/file
+  │   → Descarga/visualiza el archivo del documento para revisarlo
+  │
   └─ GET /api/admin/documents/user/{driverId}
       → Ve todos los docs del driver específico
 ```

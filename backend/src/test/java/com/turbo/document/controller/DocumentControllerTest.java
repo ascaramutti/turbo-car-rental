@@ -4,10 +4,15 @@ import com.turbo.config.SecurityHelper;
 import com.turbo.document.controller.mapper.DocumentControllerMapper;
 import com.turbo.document.dto.DocumentResponse;
 import com.turbo.document.fixture.DocumentFixture;
+import com.turbo.document.model.Document;
 import com.turbo.document.service.DocumentService;
+import com.turbo.document.service.FileStorageService;
 import com.turbo.document.service.command.ReuploadDocumentCommand;
 import com.turbo.document.service.command.UploadDocumentCommand;
+import com.turbo.exception.BusinessException;
 import com.turbo.exception.GlobalExceptionHandler;
+import com.turbo.exception.error.DocumentErrorCode;
+import org.springframework.core.io.ByteArrayResource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -38,6 +43,7 @@ class DocumentControllerTest {
 
     @Mock private DocumentService documentService;
     @Mock private DocumentControllerMapper controllerMapper;
+    @Mock private FileStorageService fileStorageService;
     @Mock private SecurityHelper securityHelper;
 
     @InjectMocks private DocumentController documentController;
@@ -130,6 +136,48 @@ class DocumentControllerTest {
                     .andExpect(jsonPath("$.status").value("PENDING"));
 
             verify(controllerMapper).toReuploadCommand(anyLong(), any(), anyLong());
+        }
+    }
+
+    // ── GET /api/driver/documents/{id}/file ──────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/driver/documents/{id}/file")
+    class DownloadFile {
+
+        @Test
+        @DisplayName("Valid file download - returns 200 with file content")
+        void downloadFile_validRequest_returns200() throws Exception {
+            Document doc = DocumentFixture.pendingLicense();
+            ByteArrayResource resource = new ByteArrayResource("pdf-content".getBytes());
+
+            when(documentService.getDocumentForDownload(100L, DocumentFixture.DRIVER_USER_ID)).thenReturn(doc);
+            when(fileStorageService.load(doc.getFileUrl())).thenReturn(resource);
+
+            mockMvc.perform(get("/api/driver/documents/100/file"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("Document not found - returns 404 with DOC-007")
+        void downloadFile_notFound_returns404() throws Exception {
+            when(documentService.getDocumentForDownload(999L, DocumentFixture.DRIVER_USER_ID))
+                    .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
+
+            mockMvc.perform(get("/api/driver/documents/999/file"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("DOC-007"));
+        }
+
+        @Test
+        @DisplayName("Wrong owner - returns 403 with DOC-006")
+        void downloadFile_wrongOwner_returns403() throws Exception {
+            when(documentService.getDocumentForDownload(100L, DocumentFixture.DRIVER_USER_ID))
+                    .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED));
+
+            mockMvc.perform(get("/api/driver/documents/100/file"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("DOC-006"));
         }
     }
 }

@@ -2,6 +2,7 @@ package com.turbo.document.service;
 
 import com.turbo.document.dto.AdminDocumentResponse;
 import com.turbo.document.dto.DocumentResponse;
+import com.turbo.document.model.Document;
 import com.turbo.document.service.command.ReuploadDocumentCommand;
 import com.turbo.document.service.command.ReviewDocumentCommand;
 import com.turbo.document.service.command.UploadDocumentCommand;
@@ -21,4 +22,8 @@ public interface DocumentService {
     AdminDocumentResponse reviewDocument(ReviewDocumentCommand command);
 
     List<AdminDocumentResponse> getDocumentsByUser(Long userId);
+
+    Document getDocumentForDownload(Long documentId, Long userId);
+
+    Document getDocumentForAdminView(Long documentId);
 }

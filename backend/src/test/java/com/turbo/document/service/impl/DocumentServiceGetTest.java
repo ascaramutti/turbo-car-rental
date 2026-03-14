@@ -10,6 +10,7 @@ import com.turbo.document.service.FileStorageService;
 import com.turbo.document.service.mapper.DocumentServiceMapper;
 import com.turbo.exception.BusinessException;
 import com.turbo.exception.error.AuthErrorCode;
+import com.turbo.exception.error.DocumentErrorCode;
 import com.turbo.user.repository.DriverRepository;
 import com.turbo.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -121,6 +122,76 @@ class DocumentServiceGetTest {
                     .isInstanceOf(BusinessException.class)
                     .extracting(ex -> ((BusinessException) ex).getErrorCode())
                     .isEqualTo(AuthErrorCode.USER_NOT_FOUND);
+        }
+    }
+
+    // ── getDocumentForDownload ───────────────────────────────────────
+
+    @Nested
+    @DisplayName("getDocumentForDownload")
+    class GetDocumentForDownload {
+
+        @Test
+        @DisplayName("Returns document when owner matches")
+        void getDocumentForDownload_ownerMatches_returnsDocument() {
+            Document doc = DocumentFixture.pendingLicense();
+            when(documentRepository.findById(DocumentFixture.DOCUMENT_ID)).thenReturn(Optional.of(doc));
+
+            Document result = documentService.getDocumentForDownload(DocumentFixture.DOCUMENT_ID, DocumentFixture.DRIVER_USER_ID);
+
+            assertThat(result).isEqualTo(doc);
+        }
+
+        @Test
+        @DisplayName("Document not found - throws DOC-007")
+        void getDocumentForDownload_notFound_throwsDocumentNotFound() {
+            when(documentRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> documentService.getDocumentForDownload(999L, DocumentFixture.DRIVER_USER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(DocumentErrorCode.DOCUMENT_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Wrong owner - throws DOC-006")
+        void getDocumentForDownload_wrongOwner_throwsAccessDenied() {
+            Document doc = DocumentFixture.pendingLicense();
+            when(documentRepository.findById(DocumentFixture.DOCUMENT_ID)).thenReturn(Optional.of(doc));
+
+            assertThatThrownBy(() -> documentService.getDocumentForDownload(DocumentFixture.DOCUMENT_ID, 999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(DocumentErrorCode.DOCUMENT_ACCESS_DENIED);
+        }
+    }
+
+    // ── getDocumentForAdminView ──────────────────────────────────────
+
+    @Nested
+    @DisplayName("getDocumentForAdminView")
+    class GetDocumentForAdminView {
+
+        @Test
+        @DisplayName("Returns document for any admin")
+        void getDocumentForAdminView_returnsDocument() {
+            Document doc = DocumentFixture.pendingLicense();
+            when(documentRepository.findById(DocumentFixture.DOCUMENT_ID)).thenReturn(Optional.of(doc));
+
+            Document result = documentService.getDocumentForAdminView(DocumentFixture.DOCUMENT_ID);
+
+            assertThat(result).isEqualTo(doc);
+        }
+
+        @Test
+        @DisplayName("Document not found - throws DOC-007")
+        void getDocumentForAdminView_notFound_throwsDocumentNotFound() {
+            when(documentRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> documentService.getDocumentForAdminView(999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(DocumentErrorCode.DOCUMENT_NOT_FOUND);
         }
     }
 }
