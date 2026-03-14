@@ -24,6 +24,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -107,7 +108,6 @@ class AuthServiceRegisterTest {
         @Test
         @DisplayName("Register as DRIVER - returns RegisterResponse and calls all dependencies")
         void register_asDriver_success() {
-            // Arrange
             RegisterCommand command = AuthFixture.driverRegisterCommand();
             Driver driver = AuthFixture.newDriver();
 
@@ -118,10 +118,8 @@ class AuthServiceRegisterTest {
             mockSaveReturnsUser();
             RegisterResponse expectedResponse = mockRegisterResponse(command.getEmail());
 
-            // Act
             RegisterResponse result = authService.register(command);
 
-            // Assert
             assertThat(result).isEqualTo(expectedResponse);
 
             verify(userRepository).existsByEmail(command.getEmail());
@@ -136,7 +134,6 @@ class AuthServiceRegisterTest {
         @Test
         @DisplayName("Register as CAR_OWNER - creates CarOwner via factory")
         void register_asCarOwner_success() {
-            // Arrange
             RegisterCommand command = AuthFixture.ownerRegisterCommand();
             CarOwner carOwner = AuthFixture.newCarOwner();
 
@@ -147,10 +144,8 @@ class AuthServiceRegisterTest {
             mockSaveReturnsUser();
             mockRegisterResponse(command.getEmail());
 
-            // Act
             RegisterResponse result = authService.register(command);
 
-            // Assert
             assertThat(result).isNotNull();
             verify(userFactory).createByRole(UserRole.CAR_OWNER);
         }
@@ -158,7 +153,6 @@ class AuthServiceRegisterTest {
         @Test
         @DisplayName("Role is case-insensitive - 'driver' maps to DRIVER")
         void register_lowercaseRole_success() {
-            // Arrange
             RegisterCommand command = AuthFixture.lowercaseRoleCommand();
             Driver driver = AuthFixture.newDriver();
 
@@ -169,10 +163,8 @@ class AuthServiceRegisterTest {
             mockSaveReturnsUser();
             mockRegisterResponse(command.getEmail());
 
-            // Act
             RegisterResponse result = authService.register(command);
 
-            // Assert
             assertThat(result).isNotNull();
             verify(userFactory).createByRole(UserRole.DRIVER);
         }
@@ -180,7 +172,6 @@ class AuthServiceRegisterTest {
         @Test
         @DisplayName("Mixed case role 'Car_Owner' maps to CAR_OWNER")
         void register_mixedCaseRole_success() {
-            // Arrange
             RegisterCommand command = AuthFixture.mixedCaseRoleCommand();
             CarOwner carOwner = AuthFixture.newCarOwner();
 
@@ -191,10 +182,8 @@ class AuthServiceRegisterTest {
             mockSaveReturnsUser();
             mockRegisterResponse(command.getEmail());
 
-            // Act
             RegisterResponse result = authService.register(command);
 
-            // Assert
             assertThat(result).isNotNull();
             verify(userFactory).createByRole(UserRole.CAR_OWNER);
         }

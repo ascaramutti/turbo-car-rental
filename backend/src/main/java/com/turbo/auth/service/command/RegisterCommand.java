@@ -14,4 +14,5 @@ public class RegisterCommand {
     private String phoneNumber;
     private LocalDate dateOfBirth;
     private String role;
+    private AddressCommand address;
 }

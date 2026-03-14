@@ -3,6 +3,7 @@ package com.turbo.auth.dto;
 import com.turbo.auth.validation.ValidationConstraints;
 import com.turbo.auth.validation.ValidationMessages;
 import com.turbo.auth.validation.ValidationPatterns;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -44,4 +45,8 @@ public class RegisterRequest {
 
     @NotBlank(message = ValidationMessages.ROLE_REQUIRED)
     private String role;
+
+    @Valid
+    @NotNull(message = ValidationMessages.ADDRESS_REQUIRED)
+    private AddressRequest address;
 }

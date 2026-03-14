@@ -5,5 +5,12 @@
   "password": "secure123",
   "phoneNumber": "+1 604 555 0002",
   "dateOfBirth": "1990-03-20",
-  "role": "CAR_OWNER"
+  "role": "CAR_OWNER",
+  "address": {
+    "streetAddress": "789 Robson St",
+    "city": "Vancouver",
+    "province": "British Columbia",
+    "postalCode": "V6Z 3B7",
+    "country": "Canada"
+  }
 }

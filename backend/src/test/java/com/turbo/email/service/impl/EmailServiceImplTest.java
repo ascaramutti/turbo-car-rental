@@ -1,7 +1,5 @@
 package com.turbo.email.service.impl;
 
-import com.turbo.exception.BusinessException;
-import com.turbo.exception.error.EmailErrorCode;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;

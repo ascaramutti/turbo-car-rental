@@ -1,5 +1,6 @@
 package com.turbo.config;
 
+import com.turbo.user.model.Address;
 import com.turbo.user.model.Admin;
 import com.turbo.user.model.CarOwner;
 import com.turbo.user.model.Driver;
@@ -30,6 +31,7 @@ public class DataInitializer implements CommandLineRunner {
             admin.setIsVerified(true);
             admin.setEmailVerified(true);
             admin.setDepartment("Platform Management");
+            admin.setAddress(new Address("1000 W Georgia St", "Vancouver", "British Columbia", "V6E 3V7", "Canada"));
             userRepository.save(admin);
             System.out.println(">>> Default admin created: admin@turbo.com / admin123");
         }
@@ -47,6 +49,7 @@ public class DataInitializer implements CommandLineRunner {
             driver.setEmailVerified(true);
             driver.setRating(0.0f);
             driver.setIsWorkEligible(false);
+            driver.setAddress(new Address("456 Granville St", "Vancouver", "British Columbia", "V6C 1T2", "Canada"));
             userRepository.save(driver);
             System.out.println(">>> Test driver created: driver@turbo.com / driver123");
         }
@@ -63,6 +66,7 @@ public class DataInitializer implements CommandLineRunner {
             owner.setIsVerified(false);
             owner.setEmailVerified(true);
             owner.setRating(0.0f);
+            owner.setAddress(new Address("789 Robson St", "Vancouver", "British Columbia", "V6Z 3B7", "Canada"));
             userRepository.save(owner);
             System.out.println(">>> Test owner created: owner@turbo.com / owner123");
         }

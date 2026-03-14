@@ -3,7 +3,9 @@ package com.turbo.auth.service.mapper;
 import com.turbo.auth.dto.AuthResponse;
 import com.turbo.auth.dto.MessageResponse;
 import com.turbo.auth.dto.RegisterResponse;
+import com.turbo.auth.service.command.AddressCommand;
 import com.turbo.auth.service.command.RegisterCommand;
+import com.turbo.user.model.Address;
 import com.turbo.user.model.User;
 import com.turbo.user.model.enums.UserRole;
 import org.mapstruct.Mapper;
@@ -37,6 +39,7 @@ public interface AuthServiceMapper {
     @Mapping(source = "command.email", target = "email")
     @Mapping(source = "command.phoneNumber", target = "phoneNumber")
     @Mapping(source = "command.dateOfBirth", target = "dateOfBirth")
+    @Mapping(source = "command.address", target = "address")
     @Mapping(source = "encodedPassword", target = "password")
     @Mapping(source = "role", target = "role")
     @Mapping(target = "isVerified", expression = "java(false)")
@@ -46,4 +49,7 @@ public interface AuthServiceMapper {
     @Mapping(target = "otpExpiresAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     void updateUserFromCommand(RegisterCommand command, String encodedPassword, UserRole role, @MappingTarget User user);
+
+    /** Maps the address command to the embeddable entity. */
+    Address toAddress(AddressCommand addressCommand);
 }

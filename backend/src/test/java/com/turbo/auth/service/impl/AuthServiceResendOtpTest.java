@@ -19,7 +19,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -31,7 +33,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,7 +66,6 @@ class AuthServiceResendOtpTest {
         @DisplayName("Resend OTP - generates new code, saves, sends email, returns message")
         void resendOtp_success() {
             User user = AuthFixture.unverifiedUserWithOtp();
-            String oldOtp = user.getOtpCode();
             MessageResponse expectedResponse = AuthFixture.resendOtpResponse();
 
             when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));

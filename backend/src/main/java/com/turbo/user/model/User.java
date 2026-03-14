@@ -45,6 +45,9 @@ public class User {
     @Column(nullable = false)
     private UserRole role;
 
+    @Embedded
+    private Address address;
+
     private Boolean isVerified = false;
 
     private Boolean emailVerified = false;

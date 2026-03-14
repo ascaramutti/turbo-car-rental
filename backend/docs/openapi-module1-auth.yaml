@@ -1,0 +1,604 @@
+openapi: 3.0.3
+info:
+  title: TURBO - Module 1 (Auth & Security)
+  description: |
+    API contract for the Auth & Security module of the TURBO peer-to-peer car rental platform.
+
+    ## Authentication Flow
+    1. `POST /register` - Register and receive OTP by email
+    2. Check email (MailHog in dev: http://localhost:8025)
+    3. `POST /verify-otp` - Verify OTP and receive JWT
+    4. `POST /login` - Log in with credentials and receive JWT
+
+    ## Validation
+    Both frontend and backend validate all inputs. Frontend validates for UX, backend validates for security (never trust the client).
+  version: 1.0.0
+  contact:
+    name: TURBO Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://localhost/api
+    description: Docker (via nginx)
+
+tags:
+  - name: Auth
+    description: Registration, login, and OTP verification
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: |
+        Registers a new user (DRIVER or CAR_OWNER) and sends a 6-digit OTP code to their email.
+        The OTP expires in 10 minutes. User must be at least 19 years old.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              driver:
+                summary: Register as DRIVER
+                value:
+                  firstName: John
+                  lastName: Doe
+                  email: john.doe@example.com
+                  password: secure123
+                  phoneNumber: "+1 604 555 0001"
+                  dateOfBirth: "2000-05-15"
+                  role: DRIVER
+                  address:
+                    streetAddress: "456 Granville St"
+                    city: "Vancouver"
+                    province: "British Columbia"
+                    postalCode: "V6C 1T2"
+                    country: "Canada"
+              carOwner:
+                summary: Register as CAR_OWNER
+                value:
+                  firstName: Maria
+                  lastName: Garcia
+                  email: maria.garcia@example.com
+                  password: mypassword
+                  phoneNumber: "(604) 555-0002"
+                  dateOfBirth: "1995-08-20"
+                  role: CAR_OWNER
+                  address:
+                    streetAddress: "789 Robson St"
+                    city: "Vancouver"
+                    province: "British Columbia"
+                    postalCode: "V6Z 3B7"
+                    country: "Canada"
+      responses:
+        '200':
+          description: Registration successful. OTP email sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              example:
+                message: "Registration successful. Please check your email for the verification code."
+                email: john.doe@example.com
+                requiresVerification: true
+        '400':
+          description: Validation error or invalid role
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validationError:
+                  summary: Empty or invalid fields (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: Validation Failed
+                    status: 400
+                    timestamp: "2026-03-13T10:00:00.000"
+                    details:
+                      email: "Email is required"
+                      password: "Password must be between 6 and 100 characters"
+                      "address.streetAddress": "Street address is required"
+                      "address.postalCode": "Invalid postal code format (expected: A1A 1A1)"
+                invalidRole:
+                  summary: Invalid role (AUTH-007)
+                  value:
+                    code: AUTH-007
+                    message: "Invalid role. Must be DRIVER or CAR_OWNER"
+                    status: 400
+                    timestamp: "2026-03-13T10:00:00.000"
+                underage:
+                  summary: User under 19 years old (AUTH-008)
+                  value:
+                    code: AUTH-008
+                    message: "You must be at least 19 years old to register"
+                    status: 400
+                    timestamp: "2026-03-13T10:00:00.000"
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-001
+                message: "Email already registered"
+                status: 409
+                timestamp: "2026-03-13T10:00:00.000"
+        '500':
+          description: Email sending failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: EMAIL-001
+                message: "Failed to send verification email"
+                status: 500
+                timestamp: "2026-03-13T10:00:00.000"
+
+  /api/auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify OTP code
+      description: |
+        Verifies the 6-digit OTP code sent to the user's email.
+        If correct, marks the email as verified and returns a JWT token.
+      operationId: verifyOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+            example:
+              email: john.doe@example.com
+              otp: "123456"
+      responses:
+        '200':
+          description: OTP verified. JWT token returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                token: "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjEsInJvbGUiOiJEUklWRVIiLCJzdWIiOiJqb2huLmRvZUBleGFtcGxlLmNvbSJ9.xxx"
+                userId: 1
+                email: john.doe@example.com
+                firstName: John
+                lastName: Doe
+                role: DRIVER
+        '400':
+          description: Validation error, invalid OTP, or expired OTP
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validationError:
+                  summary: Empty fields (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: Validation Failed
+                    status: 400
+                    timestamp: "2026-03-13T10:00:00.000"
+                    details:
+                      otp: "OTP code is required"
+                invalidOtp:
+                  summary: Wrong OTP code (AUTH-004)
+                  value:
+                    code: AUTH-004
+                    message: "Invalid verification code"
+                    status: 400
+                    timestamp: "2026-03-13T10:00:00.000"
+                expiredOtp:
+                  summary: OTP expired (AUTH-005)
+                  value:
+                    code: AUTH-005
+                    message: "Verification code has expired. Please request a new one."
+                    status: 400
+                    timestamp: "2026-03-13T10:00:00.000"
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-002
+                message: "User not found"
+                status: 404
+                timestamp: "2026-03-13T10:00:00.000"
+        '409':
+          description: Email already verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-003
+                message: "Email is already verified"
+                status: 409
+                timestamp: "2026-03-13T10:00:00.000"
+
+  /api/auth/resend-otp:
+    post:
+      tags: [Auth]
+      summary: Resend OTP code
+      description: |
+        Generates a new 6-digit OTP code and sends it to the user's email.
+        The old code is invalidated. The new code expires in 10 minutes.
+      operationId: resendOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendOtpRequest'
+            example:
+              email: john.doe@example.com
+      responses:
+        '200':
+          description: New OTP sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: "A new verification code has been sent to your email."
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                code: VALIDATION-001
+                error: Validation Failed
+                status: 400
+                timestamp: "2026-03-13T10:00:00.000"
+                details:
+                  email: "Email is required"
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-002
+                message: "User not found"
+                status: 404
+                timestamp: "2026-03-13T10:00:00.000"
+        '409':
+          description: Email already verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-003
+                message: "Email is already verified"
+                status: 409
+                timestamp: "2026-03-13T10:00:00.000"
+        '500':
+          description: Email sending failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: EMAIL-001
+                message: "Failed to send verification email"
+                status: 500
+                timestamp: "2026-03-13T10:00:00.000"
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with credentials
+      description: |
+        Authenticates the user with email and password.
+        The email must be verified first. Returns a JWT token on success.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: john.doe@example.com
+              password: secure123
+      responses:
+        '200':
+          description: Login successful. JWT token returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                token: "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjEsInJvbGUiOiJEUklWRVIiLCJzdWIiOiJqb2huLmRvZUBleGFtcGxlLmNvbSJ9.xxx"
+                userId: 1
+                email: john.doe@example.com
+                firstName: John
+                lastName: Doe
+                role: DRIVER
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                code: VALIDATION-001
+                error: Validation Failed
+                status: 400
+                timestamp: "2026-03-13T10:00:00.000"
+                details:
+                  email: "Email is required"
+        '401':
+          description: Wrong credentials (Spring Security handles this)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: SYS-001
+                message: "An unexpected error occurred"
+                status: 500
+                timestamp: "2026-03-13T10:00:00.000"
+        '403':
+          description: Email not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: AUTH-006
+                message: "Please verify your email before logging in."
+                status: 403
+                timestamp: "2026-03-13T10:00:00.000"
+
+components:
+  schemas:
+    # ── Request DTOs ────────────────────────────────────────────────
+
+    RegisterRequest:
+      type: object
+      required: [firstName, lastName, email, password, dateOfBirth, role, address]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          pattern: "^[a-zA-ZÀ-ÿ' -]+$"
+          description: "Letters, accents, apostrophes, hyphens only"
+          example: John
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          pattern: "^[a-zA-ZÀ-ÿ' -]+$"
+          description: "Letters, accents, apostrophes, hyphens only"
+          example: Doe
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: john.doe@example.com
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+          example: secure123
+        phoneNumber:
+          type: string
+          pattern: "^\\+?[0-9\\s()\\-]{7,20}$"
+          description: "Optional. Digits, spaces, +, -, (, ) only"
+          example: "+1 604 555 0001"
+          nullable: true
+        dateOfBirth:
+          type: string
+          format: date
+          description: "Must be in the past. User must be at least 19 years old."
+          example: "2000-05-15"
+        role:
+          type: string
+          enum: [DRIVER, CAR_OWNER]
+          description: "Case-insensitive: driver, Car_Owner also work"
+          example: DRIVER
+        address:
+          $ref: '#/components/schemas/Address'
+
+    Address:
+      type: object
+      description: |
+        User's residential address. Since Turbo's pilot operates exclusively in
+        British Columbia, Canada, the frontend pre-sets `country` to "Canada" and
+        `province` to "British Columbia". The user only needs to fill in street, city,
+        and postal code. Backend validates all fields regardless of defaults.
+      required: [streetAddress, city, province, postalCode, country]
+      properties:
+        streetAddress:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: "^[a-zA-Z0-9À-ÿ\\s.,#\\-/]+$"
+          description: "Street number and name. Alphanumeric, spaces, dots, commas, #, hyphens, slashes only."
+          example: "1234 Main St"
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-zA-ZÀ-ÿ\\s.\\-']+$"
+          description: "City name. Letters, spaces, dots, hyphens, apostrophes only."
+          example: "Vancouver"
+        province:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-zA-ZÀ-ÿ\\s.\\-']+$"
+          description: "Province or state. Default: British Columbia (pilot region). Letters, spaces, dots, hyphens, apostrophes only."
+          default: "British Columbia"
+          example: "British Columbia"
+        postalCode:
+          type: string
+          pattern: "^[A-Za-z]\\d[A-Za-z]\\s?\\d[A-Za-z]\\d$"
+          description: "Canadian postal code format (e.g., V6B 1A1). Strict alphanumeric pattern only."
+          example: "V6B 1A1"
+        country:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: "^[a-zA-ZÀ-ÿ\\s.\\-']+$"
+          description: "Country. Default: Canada (only supported country). Letters, spaces, dots, hyphens, apostrophes only."
+          default: "Canada"
+          example: "Canada"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: john.doe@example.com
+        password:
+          type: string
+          example: secure123
+
+    VerifyOtpRequest:
+      type: object
+      required: [email, otp]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: john.doe@example.com
+        otp:
+          type: string
+          pattern: "^\\d{6}$"
+          description: "Exactly 6 digits"
+          example: "123456"
+
+    ResendOtpRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: john.doe@example.com
+
+    # ── Response DTOs ───────────────────────────────────────────────
+
+    RegisterResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Registration successful. Please check your email for the verification code."
+        email:
+          type: string
+          example: john.doe@example.com
+        requiresVerification:
+          type: boolean
+          example: true
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: "JWT token. Send as Authorization: Bearer <token> in subsequent requests."
+          example: "eyJhbGciOiJIUzI1NiJ9..."
+        userId:
+          type: integer
+          format: int64
+          example: 1
+        email:
+          type: string
+          example: john.doe@example.com
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: Doe
+        role:
+          type: string
+          enum: [DRIVER, CAR_OWNER, ADMIN]
+          example: DRIVER
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "A new verification code has been sent to your email."
+
+    # ── Error Responses ─────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      description: Business or system error
+      properties:
+        code:
+          type: string
+          description: "Error code (e.g., AUTH-001, SYS-001)"
+          example: AUTH-001
+        message:
+          type: string
+          example: "Email already registered"
+        status:
+          type: integer
+          example: 409
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-13T10:00:00.000"
+
+    ValidationErrorResponse:
+      type: object
+      description: Field validation error
+      properties:
+        code:
+          type: string
+          example: VALIDATION-001
+        error:
+          type: string
+          example: Validation Failed
+        status:
+          type: integer
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-13T10:00:00.000"
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Map of field name to error message"
+          example:
+            email: "Email is required"
+            password: "Password must be between 6 and 100 characters"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT token obtained from /verify-otp or /login"

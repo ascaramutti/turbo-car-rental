@@ -308,6 +308,132 @@ class AuthControllerTest {
         }
 
         @Test
+        @DisplayName("Valid address with unit number (#5) - returns 200")
+        void register_addressWithUnitNumber_returns200() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setStreetAddress("100-B King Rd. #5");
+            RegisterResponse response = AuthFixture.registerResponse(request.getEmail());
+
+            when(controllerMapper.toRegisterCommand(any(RegisterRequest.class))).thenReturn(AuthFixture.driverRegisterCommand());
+            when(authService.register(any(RegisterCommand.class))).thenReturn(response);
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("Postal code without space (V6C1T2) - returns 200")
+        void register_postalCodeWithoutSpace_returns200() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setPostalCode("V6C1T2");
+            RegisterResponse response = AuthFixture.registerResponse(request.getEmail());
+
+            when(controllerMapper.toRegisterCommand(any(RegisterRequest.class))).thenReturn(AuthFixture.driverRegisterCommand());
+            when(authService.register(any(RegisterCommand.class))).thenReturn(response);
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("City with hyphen (North Vancouver) - returns 200")
+        void register_cityWithHyphen_returns200() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setCity("North Vancouver");
+            RegisterResponse response = AuthFixture.registerResponse(request.getEmail());
+
+            when(controllerMapper.toRegisterCommand(any(RegisterRequest.class))).thenReturn(AuthFixture.driverRegisterCommand());
+            when(authService.register(any(RegisterCommand.class))).thenReturn(response);
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("Missing address - returns 400 validation error")
+        void register_missingAddress_returns400() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.setAddress(null);
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION-001"));
+        }
+
+        @Test
+        @DisplayName("Missing street address - returns 400 validation error")
+        void register_missingStreetAddress_returns400() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setStreetAddress("");
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION-001"));
+        }
+
+        @Test
+        @DisplayName("Street address with SQL injection attempt - returns 400 validation error")
+        void register_streetAddressWithSqlInjection_returns400() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setStreetAddress("'; DROP TABLE users;--");
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION-001"));
+        }
+
+        @Test
+        @DisplayName("City with script tag (XSS attempt) - returns 400 validation error")
+        void register_cityWithXssAttempt_returns400() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setCity("<script>alert('xss')</script>");
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION-001"));
+        }
+
+        @Test
+        @DisplayName("City with numbers - returns 400 validation error")
+        void register_cityWithNumbers_returns400() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setCity("Vancouver123");
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION-001"));
+        }
+
+        @Test
+        @DisplayName("Invalid postal code format - returns 400 validation error")
+        void register_invalidPostalCode_returns400() throws Exception {
+            RegisterRequest request = AuthFixture.driverRegisterRequest();
+            request.getAddress().setPostalCode("12345");
+
+            mockMvc.perform(post("/api/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION-001"));
+        }
+
+        @Test
         @DisplayName("Email already registered - returns 409 with AUTH-001")
         void register_emailExists_returns409() throws Exception {
             RegisterRequest request = AuthFixture.driverRegisterRequest();
