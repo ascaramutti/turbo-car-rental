@@ -1,0 +1,16 @@
+{
+  "firstName": "Anna",
+  "lastName": "Test",
+  "email": "mixed@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0004",
+  "dateOfBirth": "1992-07-25",
+  "role": "Car_Owner",
+  "address": {
+    "streetAddress": "300 Cambie St",
+    "city": "Vancouver",
+    "province": "British Columbia",
+    "postalCode": "V6B 2N3",
+    "country": "Canada"
+  }
+}
