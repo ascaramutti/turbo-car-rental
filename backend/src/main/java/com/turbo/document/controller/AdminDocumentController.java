@@ -46,10 +46,17 @@ public class AdminDocumentController {
         return ResponseEntity.ok(documentService.getDocumentsByUser(userId));
     }
 
-    @GetMapping("/{id}/file")
+    @GetMapping("/{id}/view")
     public ResponseEntity<Resource> viewFile(@PathVariable Long id) {
         Document document = documentService.getDocumentForAdminView(id);
         Resource resource = fileStorageService.load(document.getFileUrl());
-        return FileResponseHelper.buildFileResponse(document, resource);
+        return FileResponseHelper.buildViewResponse(document, resource);
+    }
+
+    @GetMapping("/{id}/download")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
+        Document document = documentService.getDocumentForAdminView(id);
+        Resource resource = fileStorageService.load(document.getFileUrl());
+        return FileResponseHelper.buildDownloadResponse(document, resource);
     }
 }

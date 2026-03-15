@@ -203,10 +203,10 @@ class AdminDocumentControllerTest {
         }
     }
 
-    // ── GET /api/admin/documents/{id}/file ───────────────────────────
+    // ── GET /api/admin/documents/{id}/view ───────────────────────────
 
     @Nested
-    @DisplayName("GET /api/admin/documents/{id}/file")
+    @DisplayName("GET /api/admin/documents/{id}/view")
     class ViewFile {
 
         @Test
@@ -218,7 +218,7 @@ class AdminDocumentControllerTest {
             when(documentService.getDocumentForAdminView(100L)).thenReturn(doc);
             when(fileStorageService.load(doc.getFileUrl())).thenReturn(resource);
 
-            mockMvc.perform(get("/api/admin/documents/100/file"))
+            mockMvc.perform(get("/api/admin/documents/100/view"))
                     .andExpect(status().isOk());
         }
 
@@ -228,7 +228,38 @@ class AdminDocumentControllerTest {
             when(documentService.getDocumentForAdminView(999L))
                     .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
 
-            mockMvc.perform(get("/api/admin/documents/999/file"))
+            mockMvc.perform(get("/api/admin/documents/999/view"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("DOC-007"));
+        }
+    }
+
+    // ── GET /api/admin/documents/{id}/download ─────────────────────
+
+    @Nested
+    @DisplayName("GET /api/admin/documents/{id}/download")
+    class DownloadFile {
+
+        @Test
+        @DisplayName("Valid file download - returns 200 with octet-stream")
+        void downloadFile_validRequest_returns200() throws Exception {
+            Document doc = DocumentFixture.pendingLicense();
+            ByteArrayResource resource = new ByteArrayResource("pdf-content".getBytes());
+
+            when(documentService.getDocumentForAdminView(100L)).thenReturn(doc);
+            when(fileStorageService.load(doc.getFileUrl())).thenReturn(resource);
+
+            mockMvc.perform(get("/api/admin/documents/100/download"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("Document not found - returns 404 with DOC-007")
+        void downloadFile_notFound_returns404() throws Exception {
+            when(documentService.getDocumentForAdminView(999L))
+                    .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
+
+            mockMvc.perform(get("/api/admin/documents/999/download"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("DOC-007"));
         }

@@ -139,11 +139,11 @@ class DocumentControllerTest {
         }
     }
 
-    // ── GET /api/driver/documents/{id}/file ──────────────────────────
+    // ── GET /api/driver/documents/{id}/view ──────────────────────────
 
     @Nested
-    @DisplayName("GET /api/driver/documents/{id}/file")
-    class DownloadFile {
+    @DisplayName("GET /api/driver/documents/{id}/view")
+    class ViewFile {
 
         @Test
         @DisplayName("Valid file download - returns 200 with file content")
@@ -154,7 +154,7 @@ class DocumentControllerTest {
             when(documentService.getDocumentForDownload(100L, DocumentFixture.DRIVER_USER_ID)).thenReturn(doc);
             when(fileStorageService.load(doc.getFileUrl())).thenReturn(resource);
 
-            mockMvc.perform(get("/api/driver/documents/100/file"))
+            mockMvc.perform(get("/api/driver/documents/100/view"))
                     .andExpect(status().isOk());
         }
 
@@ -164,7 +164,7 @@ class DocumentControllerTest {
             when(documentService.getDocumentForDownload(999L, DocumentFixture.DRIVER_USER_ID))
                     .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
 
-            mockMvc.perform(get("/api/driver/documents/999/file"))
+            mockMvc.perform(get("/api/driver/documents/999/view"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("DOC-007"));
         }
@@ -175,7 +175,49 @@ class DocumentControllerTest {
             when(documentService.getDocumentForDownload(100L, DocumentFixture.DRIVER_USER_ID))
                     .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED));
 
-            mockMvc.perform(get("/api/driver/documents/100/file"))
+            mockMvc.perform(get("/api/driver/documents/100/view"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("DOC-006"));
+        }
+    }
+
+    // ── GET /api/driver/documents/{id}/download ────────────────────
+
+    @Nested
+    @DisplayName("GET /api/driver/documents/{id}/download")
+    class DownloadFile {
+
+        @Test
+        @DisplayName("Valid file download - returns 200 with octet-stream")
+        void downloadFile_validRequest_returns200() throws Exception {
+            Document doc = DocumentFixture.pendingLicense();
+            ByteArrayResource resource = new ByteArrayResource("pdf-content".getBytes());
+
+            when(documentService.getDocumentForDownload(100L, DocumentFixture.DRIVER_USER_ID)).thenReturn(doc);
+            when(fileStorageService.load(doc.getFileUrl())).thenReturn(resource);
+
+            mockMvc.perform(get("/api/driver/documents/100/download"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("Document not found - returns 404 with DOC-007")
+        void downloadFile_notFound_returns404() throws Exception {
+            when(documentService.getDocumentForDownload(999L, DocumentFixture.DRIVER_USER_ID))
+                    .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
+
+            mockMvc.perform(get("/api/driver/documents/999/download"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("DOC-007"));
+        }
+
+        @Test
+        @DisplayName("Wrong owner - returns 403 with DOC-006")
+        void downloadFile_wrongOwner_returns403() throws Exception {
+            when(documentService.getDocumentForDownload(100L, DocumentFixture.DRIVER_USER_ID))
+                    .thenThrow(new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED));
+
+            mockMvc.perform(get("/api/driver/documents/100/download"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.code").value("DOC-006"));
         }

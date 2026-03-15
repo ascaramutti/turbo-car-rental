@@ -50,11 +50,19 @@ public class DocumentController {
         return ResponseEntity.ok(documentService.reuploadDocument(controllerMapper.toReuploadCommand(id, file, user.getUserId())));
     }
 
-    @GetMapping("/{id}/file")
+    @GetMapping("/{id}/view")
+    public ResponseEntity<Resource> viewFile(@PathVariable Long id) {
+        User user = securityHelper.getCurrentUser();
+        Document document = documentService.getDocumentForDownload(id, user.getUserId());
+        Resource resource = fileStorageService.load(document.getFileUrl());
+        return FileResponseHelper.buildViewResponse(document, resource);
+    }
+
+    @GetMapping("/{id}/download")
     public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
         User user = securityHelper.getCurrentUser();
         Document document = documentService.getDocumentForDownload(id, user.getUserId());
         Resource resource = fileStorageService.load(document.getFileUrl());
-        return FileResponseHelper.buildFileResponse(document, resource);
+        return FileResponseHelper.buildDownloadResponse(document, resource);
     }
 }
