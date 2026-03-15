@@ -17,5 +17,19 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      exclude: [
+        '**/api/**',
+        '**/constants/**',
+        '**/test/**',
+        '**/context/**',
+        'src/shared/utils/downloadUtils.js',
+        'src/shared/api/axios.js',
+        'src/App.jsx',
+        'src/main.jsx',
+      ],
+    },
   },
 })
