@@ -1,6 +1,5 @@
 package com.turbo.document.service.impl;
 
-import com.turbo.document.dto.DocumentResponse;
 import com.turbo.document.fixture.DocumentFixture;
 import com.turbo.document.model.Document;
 import com.turbo.document.repository.DocumentRepository;
@@ -84,7 +83,6 @@ class DocumentServiceReuploadTest {
             mockDocumentFound(rejected);
             mockFileStorageForReupload();
             mockSave();
-            when(documentServiceMapper.toDocumentResponse(any())).thenReturn(mock(DocumentResponse.class));
 
             documentService.reuploadDocument(buildReuploadCommand(DocumentFixture.validPdf(), DocumentFixture.DRIVER_USER_ID));
 
@@ -99,7 +97,6 @@ class DocumentServiceReuploadTest {
             mockDocumentFound(pending);
             mockFileStorageForReupload();
             mockSave();
-            when(documentServiceMapper.toDocumentResponse(any())).thenReturn(mock(DocumentResponse.class));
 
             documentService.reuploadDocument(buildReuploadCommand(DocumentFixture.validPdf(), DocumentFixture.DRIVER_USER_ID));
 
@@ -120,7 +117,6 @@ class DocumentServiceReuploadTest {
             mockDocumentFound(rejected);
             mockFileStorageForReupload();
             mockSave();
-            when(documentServiceMapper.toDocumentResponse(any())).thenReturn(mock(DocumentResponse.class));
 
             documentService.reuploadDocument(buildReuploadCommand(DocumentFixture.validPdf(), DocumentFixture.DRIVER_USER_ID));
 
@@ -136,7 +132,6 @@ class DocumentServiceReuploadTest {
             mockDocumentFound(rejected);
             mockFileStorageForReupload();
             mockSave();
-            when(documentServiceMapper.toDocumentResponse(any())).thenReturn(mock(DocumentResponse.class));
 
             MockMultipartFile newFile = DocumentFixture.validJpg();
             documentService.reuploadDocument(buildReuploadCommand(newFile, DocumentFixture.DRIVER_USER_ID));
