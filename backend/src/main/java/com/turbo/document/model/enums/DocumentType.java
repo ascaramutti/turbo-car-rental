@@ -2,5 +2,8 @@ package com.turbo.document.model.enums;
 
 public enum DocumentType {
     DRIVERS_LICENSE,
-    STUDY_PERMIT
+    STUDY_PERMIT,
+    INSURANCE,
+    VEHICLE_REGISTRATION,
+    INSPECTION_REPORT
 }

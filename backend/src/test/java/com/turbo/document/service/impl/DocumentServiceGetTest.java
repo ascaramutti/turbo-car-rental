@@ -1,7 +1,5 @@
 package com.turbo.document.service.impl;
 
-import com.turbo.document.dto.AdminDocumentResponse;
-import com.turbo.document.dto.DocumentResponse;
 import com.turbo.document.fixture.DocumentFixture;
 import com.turbo.document.model.Document;
 import com.turbo.document.model.enums.DocumentStatus;
@@ -52,10 +50,8 @@ class DocumentServiceGetTest {
         void getMyDocuments_returnsList() {
             List<Document> docs = List.of(DocumentFixture.pendingLicense());
             when(documentRepository.findByUserUserId(DocumentFixture.DRIVER_USER_ID)).thenReturn(docs);
-            when(documentServiceMapper.toDocumentResponseList(docs))
-                    .thenReturn(List.of(new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null)));
 
-            List<DocumentResponse> result = documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID);
+            List<Document> result = documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID);
 
             assertThat(result).hasSize(1);
         }
@@ -64,9 +60,8 @@ class DocumentServiceGetTest {
         @DisplayName("Returns empty list when no documents exist")
         void getMyDocuments_noDocuments_returnsEmpty() {
             when(documentRepository.findByUserUserId(DocumentFixture.DRIVER_USER_ID)).thenReturn(Collections.emptyList());
-            when(documentServiceMapper.toDocumentResponseList(Collections.emptyList())).thenReturn(Collections.emptyList());
 
-            List<DocumentResponse> result = documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID);
+            List<Document> result = documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID);
 
             assertThat(result).isEmpty();
         }
@@ -83,10 +78,8 @@ class DocumentServiceGetTest {
         void getPendingDocuments_returnsPendingOnly() {
             List<Document> docs = List.of(DocumentFixture.pendingLicense());
             when(documentRepository.findByStatus(DocumentStatus.PENDING)).thenReturn(docs);
-            when(documentServiceMapper.toAdminDocumentResponseList(docs))
-                    .thenReturn(List.of(new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null, null)));
 
-            List<AdminDocumentResponse> result = documentService.getPendingDocuments();
+            List<Document> result = documentService.getPendingDocuments();
 
             assertThat(result).hasSize(1);
         }
@@ -105,10 +98,8 @@ class DocumentServiceGetTest {
                     .thenReturn(Optional.of(DocumentFixture.testDriver()));
             List<Document> docs = List.of(DocumentFixture.pendingLicense());
             when(documentRepository.findByUserUserId(DocumentFixture.DRIVER_USER_ID)).thenReturn(docs);
-            when(documentServiceMapper.toAdminDocumentResponseList(docs))
-                    .thenReturn(List.of(new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null, null)));
 
-            List<AdminDocumentResponse> result = documentService.getDocumentsByUser(DocumentFixture.DRIVER_USER_ID);
+            List<Document> result = documentService.getDocumentsByUser(DocumentFixture.DRIVER_USER_ID);
 
             assertThat(result).hasSize(1);
         }

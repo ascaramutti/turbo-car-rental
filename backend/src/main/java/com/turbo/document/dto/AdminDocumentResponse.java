@@ -19,4 +19,5 @@ public class AdminDocumentResponse {
     private String reviewedAt;
     private Long reviewedBy;
     private String rejectionReason;
+    private Long vehicleId;
 }

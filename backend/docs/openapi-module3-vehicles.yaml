@@ -1,0 +1,1497 @@
+openapi: 3.0.3
+info:
+  title: TURBO - Module 3 (Vehicle Catalog)
+  description: |
+    API contract for the Vehicle Catalog module of the TURBO peer-to-peer car rental platform.
+
+    ## Scope
+    This module handles **vehicle registration, vehicle documents, and vehicle availability**.
+    Car owners register their vehicles, upload vehicle-specific documents (insurance,
+    registration, inspection), and activate vehicles with an `availableUntil` datetime.
+
+    ## Vehicle Registration Flow
+    1. Car owner authenticates via JWT (Module 1)
+    2. Owner registers vehicle via `POST /owner/vehicles`
+    3. System validates vehicle data (year, VIN uniqueness, plate uniqueness)
+    4. Owner uploads vehicle documents via `POST /owner/vehicles/{vehicleId}/documents/upload`
+    5. Admin reviews vehicle documents via `PUT /admin/documents/{id}/review` (Module 2)
+    6. Owner activates vehicle with `availableUntil` via `PUT /owner/vehicles/{vehicleId}/activate`
+
+    ## Vehicle Document Types
+    - **INSURANCE:** Vehicle insurance certificate
+    - **VEHICLE_REGISTRATION:** Official vehicle registration document
+    - **INSPECTION_REPORT:** Vehicle mechanical inspection report
+
+    ## Validation Rules
+    - Vehicle year must not exceed 20 years from the current year
+    - Vehicles older than 9 years can only be registered as DELIVERY_ONLY (not TAXI_AND_DELIVERY)
+    - VIN must be unique across all vehicles
+    - License plate must be unique across all vehicles
+    - Allowed document formats: PDF, JPG, JPEG, PNG
+    - Max document file size: 5MB per file
+    - `availableUntil` must be a future datetime when activating
+
+    ## Admin Review
+    Vehicle documents are reviewed through the same admin endpoint defined in
+    Module 2 (`PUT /api/admin/documents/{id}/review`). No additional admin
+    endpoints are defined in this module.
+  version: 1.0.0
+  contact:
+    name: TURBO Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://localhost/api
+    description: Docker (via nginx)
+
+tags:
+  - name: Vehicles
+    description: Vehicle CRUD operations for authenticated car owners (secured by CAR_OWNER role)
+  - name: Admin Vehicles
+    description: Admin operations for vehicle approval (secured by ADMIN role)
+  - name: Vehicle Documents
+    description: Vehicle document upload and retrieval for authenticated car owners
+
+paths:
+  # ── Vehicle CRUD ──────────────────────────────────────────────
+
+  /api/owner/vehicles:
+    post:
+      tags: [Vehicles]
+      summary: Register a new vehicle
+      description: |
+        Registers a new vehicle for the authenticated car owner. The system validates
+        the vehicle year (max 20 years old), VIN uniqueness, and license plate uniqueness.
+        Vehicles older than 9 years can only be assigned DELIVERY_ONLY service type upon approval.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: registerVehicle
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterVehicleRequest'
+            example:
+              vin: "1HGBH41JXMN109186"
+              make: "Honda"
+              model: "Civic"
+              year: 2020
+              licensePlate: "ABC-1234"
+              category: "SEDAN"
+              fuelType: "GASOLINE"
+              description: "Well-maintained Honda Civic, perfect for city driving"
+      responses:
+        '200':
+          description: Vehicle registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+              example:
+                vehicleId: 1
+                ownerId: 5
+                ownerFullName: "Jane Smith"
+                vin: "1HGBH41JXMN109186"
+                make: "Honda"
+                model: "Civic"
+                year: 2020
+                licensePlate: "ABC-1234"
+                category: "SEDAN"
+                fuelType: "GASOLINE"
+                hourlyRate: null
+                description: "Well-maintained Honda Civic, perfect for city driving"
+                generalLocation: null
+                latitude: null
+                longitude: null
+                status: "PENDING"
+                serviceType: null
+                isActive: false
+                availableUntil: null
+                createdAt: "2026-03-15T10:00:00.000"
+        '400':
+          description: Validation error (year too old, too new, or invalid fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                yearExceeded:
+                  summary: Vehicle year exceeds 20 years (VEH-001)
+                  value:
+                    code: VEH-001
+                    message: "Vehicle year exceeds 20 years"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                validationError:
+                  summary: Invalid field pattern (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: "Validation Failed"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                    details:
+                      make: "Make is required"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '409':
+          description: VIN or license plate already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                vinDuplicate:
+                  summary: VIN already registered (VEH-002)
+                  value:
+                    code: VEH-002
+                    message: "VIN already registered"
+                    status: 409
+                    timestamp: "2026-03-15T10:00:00.000"
+                plateDuplicate:
+                  summary: License plate already registered (VEH-003)
+                  value:
+                    code: VEH-003
+                    message: "License plate already registered"
+                    status: 409
+                    timestamp: "2026-03-15T10:00:00.000"
+
+    get:
+      tags: [Vehicles]
+      summary: List my vehicles
+      description: |
+        Returns all vehicles owned by the authenticated car owner.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: listMyVehicles
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of owner's vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VehicleResponse'
+              example:
+                - vehicleId: 1
+                  ownerFullName: "Jane Smith"
+                  vin: "1HGBH41JXMN109186"
+                  make: "Honda"
+                  model: "Civic"
+                  year: 2020
+                  licensePlate: "ABC-1234"
+                  category: "SEDAN"
+                  fuelType: "GASOLINE"
+                  hourlyRate: 15.50
+                  description: "Well-maintained Honda Civic, perfect for city driving"
+                  generalLocation: "Downtown Montreal"
+                  latitude: 45.5017
+                  longitude: -73.5673
+                  status: "APPROVED"
+                  isActive: true
+                  availableUntil: "2026-03-20T17:00:00.000"
+                  createdAt: "2026-03-15T10:00:00.000"
+                - vehicleId: 2
+                  ownerId: 5
+                  ownerFullName: "Jane Smith"
+                  vin: "2T1BURHE0HC123456"
+                  make: "Toyota"
+                  model: "Corolla"
+                  year: 2021
+                  licensePlate: "XYZ-5678"
+                  category: "SEDAN"
+                  fuelType: "HYBRID"
+                  hourlyRate: null
+                  description: "Fuel-efficient Toyota Corolla"
+                  generalLocation: null
+                  latitude: null
+                  longitude: null
+                  status: "PENDING"
+                  serviceType: null
+                  isActive: false
+                  availableUntil: null
+                  createdAt: "2026-03-15T11:00:00.000"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+
+  /api/owner/vehicles/{id}:
+    get:
+      tags: [Vehicles]
+      summary: Get vehicle details
+      description: |
+        Returns details for a specific vehicle owned by the authenticated car owner.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: getVehicleById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      responses:
+        '200':
+          description: Vehicle details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+              example:
+                vehicleId: 1
+                ownerFullName: "Jane Smith"
+                vin: "1HGBH41JXMN109186"
+                make: "Honda"
+                model: "Civic"
+                year: 2020
+                licensePlate: "ABC-1234"
+                category: "SEDAN"
+                fuelType: "GASOLINE"
+                hourlyRate: 15.50
+                description: "Well-maintained Honda Civic, perfect for city driving"
+                generalLocation: "Downtown Montreal"
+                latitude: 45.5017
+                longitude: -73.5673
+                status: "APPROVED"
+                isActive: true
+                availableUntil: "2026-03-20T17:00:00.000"
+                createdAt: "2026-03-15T10:00:00.000"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Vehicle does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+    put:
+      tags: [Vehicles]
+      summary: Update vehicle
+      description: |
+        Updates an existing vehicle owned by the authenticated car owner.
+        VIN cannot be changed after registration.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: updateVehicle
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVehicleRequest'
+            example:
+              make: "Honda"
+              model: "Civic"
+              year: 2020
+              licensePlate: "ABC-1234"
+              category: "SEDAN"
+              fuelType: "GASOLINE"
+              description: "Updated description — recently serviced"
+      responses:
+        '200':
+          description: Vehicle updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+              example:
+                vehicleId: 1
+                ownerFullName: "Jane Smith"
+                vin: "1HGBH41JXMN109186"
+                make: "Honda"
+                model: "Civic"
+                year: 2020
+                licensePlate: "ABC-1234"
+                category: "SEDAN"
+                fuelType: "GASOLINE"
+                hourlyRate: 18.00
+                description: "Updated description — recently serviced"
+                generalLocation: "Downtown Montreal"
+                latitude: 45.5017
+                longitude: -73.5673
+                status: "APPROVED"
+                isActive: true
+                availableUntil: "2026-03-20T17:00:00.000"
+                createdAt: "2026-03-15T10:00:00.000"
+        '400':
+          description: Validation error (year too old or invalid fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                yearExceeded:
+                  summary: Vehicle year exceeds 20 years (VEH-001)
+                  value:
+                    code: VEH-001
+                    message: "Vehicle year exceeds 20 years"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                validationError:
+                  summary: Invalid field pattern (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: "Validation Failed"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                    details:
+                      make: "Make is required"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Vehicle does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+  # ── Admin Vehicle Classification & Approval ─────────────────
+
+  /api/admin/vehicles/{id}/classification-check:
+    get:
+      tags: [Admin Vehicles]
+      summary: Check if a vehicle is ready for classification
+      description: |
+        Checks if all uploaded documents for a vehicle have been approved.
+        If ready, returns available service type options based on vehicle year
+        and whether an inspection report was approved.
+        Requires JWT authentication with ADMIN role.
+      operationId: checkVehicleClassification
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      responses:
+        '200':
+          description: Classification readiness check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleClassificationCheckResponse'
+              examples:
+                readyWithTaxi:
+                  summary: Ready — eligible for Taxi + Delivery
+                  value:
+                    readyForClassification: true
+                    vehicleId: 17
+                    vehicleYear: 2023
+                    vehicleMake: "Toyota"
+                    vehicleModel: "Camry"
+                    hasApprovedInspection: true
+                    availableServiceTypes: ["TAXI_AND_DELIVERY", "DELIVERY_ONLY"]
+                    documents:
+                      - documentId: 30
+                        documentType: "INSURANCE"
+                        status: "APPROVED"
+                        fileName: "insurance.pdf"
+                      - documentId: 31
+                        documentType: "VEHICLE_REGISTRATION"
+                        status: "APPROVED"
+                        fileName: "registration.pdf"
+                      - documentId: 32
+                        documentType: "INSPECTION_REPORT"
+                        status: "APPROVED"
+                        fileName: "inspection.pdf"
+                notReady:
+                  summary: Not ready — documents still pending
+                  value:
+                    readyForClassification: false
+                    vehicleId: 17
+                    vehicleYear: 2023
+                    vehicleMake: "Toyota"
+                    vehicleModel: "Camry"
+                    hasApprovedInspection: false
+                    availableServiceTypes: []
+                    documents:
+                      - documentId: 30
+                        documentType: "INSURANCE"
+                        status: "APPROVED"
+                        fileName: "insurance.pdf"
+                      - documentId: 31
+                        documentType: "VEHICLE_REGISTRATION"
+                        status: "PENDING"
+                        fileName: "registration.pdf"
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-16T10:00:00.000"
+
+  /api/admin/vehicles/{id}/approve:
+    put:
+      tags: [Vehicles]
+      summary: Approve a vehicle with service type
+      description: |
+        Admin approves a vehicle and assigns a service type (TAXI_AND_DELIVERY or DELIVERY_ONLY).
+        The vehicle status changes to APPROVED, allowing the owner to activate it.
+        Note: Vehicles older than 9 years can only be approved with DELIVERY_ONLY service type.
+        Requires JWT authentication with ADMIN role.
+      operationId: approveVehicle
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveVehicleRequest'
+            example:
+              serviceType: "TAXI_AND_DELIVERY"
+      responses:
+        '200':
+          description: Vehicle approved with assigned service type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+              example:
+                vehicleId: 1
+                ownerId: 5
+                ownerFullName: "Jane Smith"
+                vin: "1HGBH41JXMN109186"
+                make: "Honda"
+                model: "Civic"
+                year: 2020
+                licensePlate: "ABC-1234"
+                category: "SEDAN"
+                fuelType: "GASOLINE"
+                hourlyRate: null
+                description: "Well-maintained Honda Civic"
+                generalLocation: "Downtown Montreal"
+                latitude: 45.5017
+                longitude: -73.5673
+                status: "APPROVED"
+                serviceType: "TAXI_AND_DELIVERY"
+                isActive: false
+                availableUntil: null
+                createdAt: "2026-03-15T10:00:00.000"
+        '400':
+          description: Invalid service type or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidServiceType:
+                  summary: Invalid service type (VEH-008)
+                  value:
+                    code: VEH-008
+                    message: "Invalid service type"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                ageRestriction:
+                  summary: Vehicle too old for TAXI_AND_DELIVERY (VEH-013)
+                  value:
+                    code: VEH-013
+                    message: "Vehicles older than 9 years can only be registered as DELIVERY_ONLY"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                validationError:
+                  summary: Invalid field pattern (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: "Validation Failed"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                    details:
+                      serviceType: "Service type is required"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+  # ── Owner Vehicle Activate / Deactivate ────────────────────
+
+  /api/owner/vehicles/{vehicleId}/activate:
+    put:
+      tags: [Vehicles]
+      summary: Activate vehicle (list for rent)
+      description: |
+        Lists the vehicle for rent with an availability end datetime. The vehicle must
+        have been approved by an admin before it can be activated. The `availableUntil`
+        field must be a future datetime. Vehicle is considered available when
+        `isActive=true` AND `availableUntil > now()`.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: activateVehicle
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateVehicleRequest'
+            example:
+              availableUntil: "2026-03-20T17:00:00"
+              generalLocation: "Downtown Montreal"
+              latitude: 45.5017
+              longitude: -73.5673
+              hourlyRate: 15.50
+      responses:
+        '200':
+          description: Vehicle activated (listed for rent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleResponse'
+              example:
+                vehicleId: 1
+                ownerId: 5
+                ownerFullName: "Jane Smith"
+                vin: "1HGBH41JXMN109186"
+                make: "Honda"
+                model: "Civic"
+                year: 2020
+                licensePlate: "ABC-1234"
+                category: "SEDAN"
+                fuelType: "GASOLINE"
+                hourlyRate: 15.50
+                description: "Well-maintained Honda Civic"
+                generalLocation: "Downtown Montreal"
+                latitude: 45.5017
+                longitude: -73.5673
+                status: "APPROVED"
+                serviceType: "TAXI_AND_DELIVERY"
+                isActive: true
+                availableUntil: "2026-03-20T17:00:00.000"
+                createdAt: "2026-03-15T10:00:00.000"
+        '400':
+          description: Vehicle must be approved before listing, or availableUntil is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notApproved:
+                  summary: Vehicle must be approved before listing (VEH-009)
+                  value:
+                    code: VEH-009
+                    message: "Vehicle must be approved before listing"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                invalidAvailableUntil:
+                  summary: availableUntil must be in the future (VEH-012)
+                  value:
+                    code: VEH-012
+                    message: "Available until must be in the future"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Vehicle does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+  /api/owner/vehicles/{vehicleId}/deactivate:
+    put:
+      tags: [Vehicles]
+      summary: Deactivate vehicle (remove from rent)
+      description: |
+        Removes the vehicle from rent listings. The vehicle is not deleted,
+        only marked as not active. Requires JWT authentication with CAR_OWNER role.
+      operationId: deactivateVehicle
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      responses:
+        '204':
+          description: Vehicle deactivated (removed from rent listings)
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Vehicle does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+  # ── Vehicle Documents ─────────────────────────────────────────
+
+  /api/owner/vehicles/{vehicleId}/documents/upload:
+    post:
+      tags: [Vehicle Documents]
+      summary: Upload a vehicle document
+      description: |
+        Uploads a document file for a specific vehicle owned by the authenticated car owner.
+        The file is validated (format and size) and saved with status PENDING for admin review.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: uploadVehicleDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, documentType]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "PDF, JPG, JPEG, or PNG file. Max 5MB."
+                documentType:
+                  type: string
+                  enum: [INSURANCE, VEHICLE_REGISTRATION, INSPECTION_REPORT]
+                  description: "Type of vehicle document being uploaded."
+      responses:
+        '200':
+          description: Document uploaded successfully. Status set to PENDING.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+              example:
+                documentId: 10
+                userId: 5
+                documentType: "INSURANCE"
+                fileName: "insurance-cert.pdf"
+                fileSize: 1048576
+                status: "PENDING"
+                uploadedAt: "2026-03-15T10:00:00.000"
+        '400':
+          description: Invalid file format, file too large, or invalid document type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidFormat:
+                  summary: Unsupported file format (DOC-001)
+                  value:
+                    code: DOC-001
+                    message: "Invalid file format. Only PDF, JPG, JPEG, and PNG are allowed"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                fileTooLarge:
+                  summary: File exceeds 5MB limit (DOC-002)
+                  value:
+                    code: DOC-002
+                    message: "File size exceeds the maximum allowed size of 5MB"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                invalidDocumentType:
+                  summary: Invalid vehicle document type (VEH-006)
+                  value:
+                    code: VEH-006
+                    message: "Invalid document type. Only INSURANCE, VEHICLE_REGISTRATION, and INSPECTION_REPORT are allowed"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '409':
+          description: Document of this type already exists and is pending or approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-004
+                message: "An INSURANCE document is already pending review"
+                status: 409
+                timestamp: "2026-03-15T10:00:00.000"
+
+  /api/owner/vehicles/{vehicleId}/documents:
+    get:
+      tags: [Vehicle Documents]
+      summary: List vehicle documents
+      description: |
+        Returns all documents uploaded for a specific vehicle owned by the authenticated car owner.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: listVehicleDocuments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      responses:
+        '200':
+          description: List of vehicle documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentResponse'
+              example:
+                - documentId: 10
+                  userId: 5
+                  documentType: "INSURANCE"
+                  fileName: "insurance-cert.pdf"
+                  fileSize: 1048576
+                  status: "APPROVED"
+                  uploadedAt: "2026-03-15T10:00:00.000"
+                  reviewedAt: "2026-03-15T11:30:00.000"
+                - documentId: 11
+                  userId: 5
+                  documentType: "VEHICLE_REGISTRATION"
+                  fileName: "registration.jpg"
+                  fileSize: 2048576
+                  status: "PENDING"
+                  uploadedAt: "2026-03-15T10:05:00.000"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+
+  /api/owner/vehicles/{vehicleId}/documents/{docId}/view:
+    get:
+      tags: [Vehicle Documents]
+      summary: View vehicle document file inline
+      description: |
+        Returns the actual file (PDF/JPG/PNG) for a vehicle document owned by the authenticated car owner.
+        Uses Content-Disposition: inline for browser viewing.
+        Content-Type is determined by the file type.
+      operationId: viewVehicleDocumentFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+        - name: docId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      responses:
+        '200':
+          description: File content (Content-Type based on file)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Document does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-007
+                message: "Document not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+  /api/owner/vehicles/{vehicleId}/documents/{docId}/download:
+    get:
+      tags: [Vehicle Documents]
+      summary: Download vehicle document file
+      description: |
+        Forces download of the vehicle document file with Content-Disposition: attachment.
+        Response Content-Type is application/octet-stream.
+      operationId: downloadVehicleDocumentFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+        - name: docId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      responses:
+        '200':
+          description: File content (forces download)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Document does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-007
+                message: "Document not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+  /api/owner/vehicles/{vehicleId}/documents/{docId}/reupload:
+    put:
+      tags: [Vehicle Documents]
+      summary: Re-upload a vehicle document
+      description: |
+        Replaces a vehicle document with a new file.
+        Allowed when document status is PENDING or REJECTED.
+        Resets status to PENDING for admin review. If the document was already
+        APPROVED, it cannot be replaced.
+      operationId: reuploadVehicleDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+        - name: docId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "PDF, JPG, JPEG, or PNG file. Max 5MB."
+      responses:
+        '200':
+          description: Document re-uploaded. Status reset to PENDING.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Document already approved, or invalid file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alreadyApproved:
+                  summary: Document already approved (DOC-005)
+                  value:
+                    code: DOC-005
+                    message: "Approved documents cannot be replaced"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                invalidFormat:
+                  summary: Invalid file format (DOC-001)
+                  value:
+                    code: DOC-001
+                    message: "Invalid file format. Only PDF, JPG, JPEG, and PNG are allowed"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+                fileTooLarge:
+                  summary: File exceeds 5MB (DOC-002)
+                  value:
+                    code: DOC-002
+                    message: "File size exceeds the maximum allowed size of 5MB"
+                    status: 400
+                    timestamp: "2026-03-15T10:00:00.000"
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+        '403':
+          description: Document does not belong to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-005
+                message: "Vehicle does not belong to authenticated user"
+                status: 403
+                timestamp: "2026-03-15T10:00:00.000"
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: DOC-007
+                message: "Document not found"
+                status: 404
+                timestamp: "2026-03-15T10:00:00.000"
+
+components:
+  schemas:
+    # ── Request DTOs ────────────────────────────────────────────────
+
+    RegisterVehicleRequest:
+      type: object
+      required: [vin, make, model, year, licensePlate, category, fuelType]
+      properties:
+        vin:
+          type: string
+          pattern: "^[A-HJ-NPR-Z0-9]{17}$"
+          description: "Vehicle Identification Number. Exactly 17 alphanumeric characters (excluding I, O, Q). Must be unique."
+          example: "1HGBH41JXMN109186"
+        make:
+          type: string
+          pattern: "^[a-zA-Z0-9À-ÿ\\s\\-'.]+$"
+          description: "Vehicle manufacturer. Letters, numbers, spaces, hyphens, and apostrophes only."
+          example: "Honda"
+        model:
+          type: string
+          pattern: "^[a-zA-Z0-9À-ÿ\\s\\-'.]+$"
+          description: "Vehicle model. Letters, numbers, spaces, hyphens, and apostrophes only."
+          example: "Civic"
+        year:
+          type: integer
+          minimum: 2006
+          maximum: 2027
+          description: "Vehicle year. Must not exceed 20 years from the current year. Vehicles older than 9 years are restricted to DELIVERY_ONLY service type."
+          example: 2022
+        licensePlate:
+          type: string
+          pattern: "^[A-Z0-9\\-\\s]{2,10}$"
+          description: "License plate number. 2-10 uppercase alphanumeric characters, hyphens, spaces. Must be unique."
+          example: "ABC 1234"
+        category:
+          type: string
+          enum: [SEDAN, SUV, VAN, TRUCK, COMPACT]
+          description: "Vehicle category."
+          example: "SEDAN"
+        fuelType:
+          type: string
+          enum: [GASOLINE, DIESEL, ELECTRIC, HYBRID]
+          description: "Fuel type."
+          example: "GASOLINE"
+        description:
+          type: string
+          maxLength: 500
+          pattern: "^[a-zA-Z0-9À-ÿ\\s.,!?()'+:\\-/]*$"
+          description: "Vehicle description (optional). Letters, numbers, spaces, and basic punctuation only."
+          example: "Well-maintained Honda Civic, perfect for city driving"
+
+    UpdateVehicleRequest:
+      type: object
+      description: "All fields are optional. Only non-null fields will be updated."
+      properties:
+        make:
+          type: string
+          pattern: "^[a-zA-Z0-9À-ÿ\\s\\-'.]+$"
+          description: "Vehicle manufacturer. Letters, numbers, spaces, hyphens, and apostrophes only."
+          example: "Honda"
+        model:
+          type: string
+          pattern: "^[a-zA-Z0-9À-ÿ\\s\\-'.]+$"
+          description: "Vehicle model. Letters, numbers, spaces, hyphens, and apostrophes only."
+          example: "Civic"
+        year:
+          type: integer
+          minimum: 2006
+          maximum: 2027
+          description: "Vehicle year. Must not exceed 20 years from the current year. Vehicles older than 9 years are restricted to DELIVERY_ONLY service type."
+          example: 2022
+        licensePlate:
+          type: string
+          pattern: "^[A-Z0-9\\-\\s]{2,10}$"
+          description: "License plate. 2-10 uppercase alphanumeric characters, hyphens, spaces."
+          example: "XYZ 5678"
+        category:
+          type: string
+          enum: [SEDAN, SUV, VAN, TRUCK, COMPACT]
+          description: "Vehicle category."
+          example: "SEDAN"
+        fuelType:
+          type: string
+          enum: [GASOLINE, DIESEL, ELECTRIC, HYBRID]
+          description: "Fuel type."
+          example: "GASOLINE"
+        description:
+          type: string
+          maxLength: 500
+          pattern: "^[a-zA-Z0-9À-ÿ\\s.,!?()'+:\\-/]*$"
+          description: "Vehicle description. Letters, numbers, spaces, and basic punctuation only."
+          example: "Updated description, recently serviced"
+
+    ApproveVehicleRequest:
+      type: object
+      required: [serviceType]
+      properties:
+        serviceType:
+          type: string
+          description: "Service type to assign to the vehicle"
+          enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+          example: "TAXI_AND_DELIVERY"
+
+    ActivateVehicleRequest:
+      type: object
+      required: [availableUntil, generalLocation, latitude, longitude, hourlyRate]
+      properties:
+        availableUntil:
+          type: string
+          format: date-time
+          description: "Datetime until which the vehicle is available for rent. Must be in the future."
+          example: "2026-03-20T17:00:00"
+        generalLocation:
+          type: string
+          maxLength: 100
+          pattern: "^[a-zA-Z0-9À-ÿ\\s.,#\\-'/]+$"
+          description: "General location where the vehicle is available. Letters, numbers, spaces, commas, periods, hyphens, and # only."
+          example: "Downtown Montreal"
+        latitude:
+          type: number
+          format: double
+          description: "Latitude coordinate of the vehicle location."
+          example: 45.5017
+        longitude:
+          type: number
+          format: double
+          description: "Longitude coordinate of the vehicle location."
+          example: -73.5673
+        hourlyRate:
+          type: number
+          format: double
+          minimum: 1.00
+          description: "Hourly rental rate in dollars. Set each time the owner lists the vehicle for rent. Minimum $1.00."
+          example: 15.50
+
+    # ── Response DTOs ───────────────────────────────────────────────
+
+    VehicleResponse:
+      type: object
+      properties:
+        vehicleId:
+          type: integer
+          format: int64
+          example: 1
+        ownerId:
+          type: integer
+          format: int64
+          description: "ID of the vehicle owner"
+          example: 5
+        ownerFullName:
+          type: string
+          description: "firstName + lastName of the vehicle owner"
+          example: "Jane Smith"
+        vin:
+          type: string
+          example: "1HGBH41JXMN109186"
+        make:
+          type: string
+          example: "Honda"
+        model:
+          type: string
+          example: "Civic"
+        year:
+          type: integer
+          example: 2020
+        licensePlate:
+          type: string
+          example: "ABC-1234"
+        category:
+          type: string
+          example: "SEDAN"
+        fuelType:
+          type: string
+          example: "GASOLINE"
+        hourlyRate:
+          type: number
+          format: double
+          nullable: true
+          description: "Hourly rental rate in dollars. Null until the vehicle is activated for rent."
+          example: 15.50
+        description:
+          type: string
+          example: "Well-maintained Honda Civic, perfect for city driving"
+        generalLocation:
+          type: string
+          nullable: true
+          description: "General location where the vehicle is available. Set during activation."
+          example: "Downtown Montreal"
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          description: "Latitude coordinate. Set during activation."
+          example: 45.5017
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          description: "Longitude coordinate. Set during activation."
+          example: -73.5673
+        status:
+          type: string
+          enum: [PENDING, APPROVED, INACTIVE]
+          example: "APPROVED"
+        serviceType:
+          type: string
+          nullable: true
+          enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+          description: "Service type assigned by admin on approval. Null until approved."
+          example: "TAXI_AND_DELIVERY"
+        isActive:
+          type: boolean
+          example: true
+        availableUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Datetime until which the vehicle is available. Null when not active."
+          example: "2026-03-20T17:00:00.000"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-03-15T10:00:00.000"
+
+    DocumentResponse:
+      type: object
+      description: "Reused from Module 2 — document response for vehicle documents"
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          example: 10
+        userId:
+          type: integer
+          format: int64
+          example: 5
+        documentType:
+          type: string
+          enum: [INSURANCE, VEHICLE_REGISTRATION, INSPECTION_REPORT]
+          example: "INSURANCE"
+        fileName:
+          type: string
+          example: "insurance-cert.pdf"
+        fileSize:
+          type: number
+          description: "File size in bytes"
+          example: 1048576
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+          example: "PENDING"
+        uploadedAt:
+          type: string
+          format: date-time
+          example: "2026-03-15T10:00:00.000"
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        rejectionReason:
+          type: string
+          nullable: true
+          description: "Only present when status is REJECTED"
+          example: null
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Operation completed successfully"
+
+    VehicleClassificationCheckResponse:
+      type: object
+      description: "Result of checking whether a vehicle is ready for classification after all documents are approved."
+      properties:
+        readyForClassification:
+          type: boolean
+          description: "True when all uploaded documents for this vehicle are approved."
+          example: true
+        vehicleId:
+          type: integer
+          format: int64
+          example: 17
+        vehicleYear:
+          type: integer
+          example: 2023
+        vehicleMake:
+          type: string
+          example: "Toyota"
+        vehicleModel:
+          type: string
+          example: "Camry"
+        hasApprovedInspection:
+          type: boolean
+          description: "True if INSPECTION_REPORT document is among the approved documents."
+          example: true
+        availableServiceTypes:
+          type: array
+          description: |
+            Service types available for classification based on vehicle year and documents.
+            Empty when readyForClassification is false.
+            Rules:
+            - Vehicle >9 years → ["DELIVERY_ONLY"]
+            - Vehicle ≤9 years without inspection → ["DELIVERY_ONLY"]
+            - Vehicle ≤9 years with inspection → ["TAXI_AND_DELIVERY", "DELIVERY_ONLY"]
+          items:
+            type: string
+            enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+          example: ["TAXI_AND_DELIVERY", "DELIVERY_ONLY"]
+        documents:
+          type: array
+          description: "Summary of all documents uploaded for this vehicle."
+          items:
+            type: object
+            properties:
+              documentId:
+                type: integer
+                format: int64
+                example: 30
+              documentType:
+                type: string
+                enum: [INSURANCE, VEHICLE_REGISTRATION, INSPECTION_REPORT]
+                example: "INSURANCE"
+              status:
+                type: string
+                enum: [PENDING, APPROVED, REJECTED]
+                example: "APPROVED"
+              fileName:
+                type: string
+                example: "insurance.pdf"
+
+    AdminDocumentResponseNote:
+      type: object
+      description: |
+        Note: The AdminDocumentResponse (defined in Module 2) now includes an additional field:
+        - `vehicleId` (integer, int64, nullable): Present when the document belongs to a vehicle.
+          The frontend uses this field to trigger the classification-check after approving a vehicle document.
+
+    # ── Error Responses ─────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      description: |
+        Business or system error.
+
+        ## Error Codes Reference
+        | Code | HTTP | Description |
+        |------|------|-------------|
+        | VEH-001 | 400 | Vehicle year exceeds 20 years |
+        | VEH-002 | 409 | VIN already registered |
+        | VEH-003 | 409 | License plate already registered |
+        | VEH-004 | 404 | Vehicle not found |
+        | VEH-005 | 403 | Vehicle does not belong to authenticated user |
+        | VEH-007 | 403 | Only car owners can manage vehicles |
+        | VEH-008 | 400 | Invalid service type |
+        | VEH-009 | 400 | Vehicle must be approved before listing |
+        | VEH-010 | 400 | Invalid vehicle category |
+        | VEH-011 | 400 | Invalid fuel type |
+        | VEH-012 | 400 | Available until must be in the future |
+        | VEH-013 | 400 | Vehicles older than 9 years can only be registered as DELIVERY_ONLY |
+        | VEH-014 | 400 | Vehicle year cannot be more than 1 year in the future |
+        | VEH-015 | 400 | Approved inspection report (CVIP) required for TAXI_AND_DELIVERY |
+        | DOC-001 | 400 | Invalid file format |
+        | DOC-002 | 400 | File size exceeds 5MB |
+        | VEH-006 | 400 | Invalid vehicle document type (only INSURANCE, VEHICLE_REGISTRATION, INSPECTION_REPORT) |
+        | DOC-004 | 409 | Document already pending/approved |
+        | DOC-005 | 400 | Approved documents cannot be replaced |
+        | DOC-007 | 404 | Document not found |
+        | VALIDATION-001 | 400 | Field-level validation errors |
+      properties:
+        code:
+          type: string
+          description: "Error code (e.g., VEH-001, DOC-001)"
+          example: VEH-001
+        message:
+          type: string
+          example: "Vehicle year exceeds 20 years"
+        status:
+          type: integer
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-15T10:00:00.000"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT token obtained from Module 1 /verify-otp or /login"

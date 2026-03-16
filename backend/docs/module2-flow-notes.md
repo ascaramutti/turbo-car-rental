@@ -59,7 +59,7 @@ Admin
   ├─ GET /api/admin/documents/pending
   │   → Lista de todos los documentos PENDING con datos del usuario
   │
-  ├─ GET /api/admin/documents/{id}/file
+  ├─ GET /api/admin/documents/{id}/view
   │   → Descarga/visualiza el archivo del documento para revisarlo
   │
   └─ GET /api/admin/documents/user/{driverId}

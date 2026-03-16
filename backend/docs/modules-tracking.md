@@ -6,7 +6,7 @@
 |---|--------|--------|---------|----------|-------|--------|
 | 1 | Auth & Security | `module-1/frontend` | Done | Done | 148 BE / 56 FE | Merged to `predevelop` |
 | 2 | Document Verification | `module-2` | - | - | - | In progress |
-| 3 | Vehicle Catalog | - | - | - | - | Not started |
+| 3 | Vehicle Catalog | `module-3` | Done | Done | 296 BE / 216 FE / 22 E2E | In review |
 | 4 | Booking Orchestrator | - | - | - | - | Not started |
 | 5 | Transaction Processor | - | - | - | - | Not started |
 | 6 | Reviews | - | - | - | - | Not started |
@@ -44,15 +44,32 @@
 ---
 
 ## Module 3 — Vehicle Catalog
-**Scope:** Vehicle registration, vehicle documents (insurance/registration/inspection), fleet management, availability slots, location masking
-**Entities:** Vehicle, AvailabilitySlot, Document (with vehicle_id)
+**Branch:** `module-3`
+**Scope:** Vehicle registration, vehicle documents (insurance/registration/inspection), admin vehicle approval with service type, activate/deactivate with availableUntil
+**Endpoints:**
+- `POST /api/owner/vehicles` — Register a new vehicle
+- `GET /api/owner/vehicles` — List my vehicles
+- `GET /api/owner/vehicles/{id}` — Get vehicle details
+- `PUT /api/owner/vehicles/{id}` — Update vehicle
+- `PUT /api/owner/vehicles/{vehicleId}/activate` — Activate vehicle with availableUntil
+- `PUT /api/owner/vehicles/{vehicleId}/deactivate` — Remove vehicle from rent
+- `POST /api/owner/vehicles/{vehicleId}/documents/upload` — Upload vehicle document
+- `GET /api/owner/vehicles/{vehicleId}/documents` — List vehicle documents
+- `GET /api/owner/vehicles/{vehicleId}/documents/{docId}/view` — View document inline
+- `GET /api/owner/vehicles/{vehicleId}/documents/{docId}/download` — Download document
+- `PUT /api/owner/vehicles/{vehicleId}/documents/{docId}/reupload` — Re-upload document
+- `PUT /api/admin/vehicles/{id}/approve` — Admin approves vehicle with service type (no vehicle rejection; document rejection is handled by Module 2)
+**Entities:** Vehicle, Document (with vehicle_id)
 **Key flows:**
 - CarOwner registers vehicle (VIN, make, model, year, plate, price, description)
 - CarOwner uploads vehicle docs: INSURANCE, VEHICLE_REGISTRATION, INSPECTION_REPORT (per vehicle)
-- Admin reviews vehicle docs → all APPROVED → Vehicle.isActive=true
-- Vehicle validation: <= 9 years old, no salvage/rebuilt history
+- Admin reviews vehicle docs via Module 2 endpoint
+- Admin approves vehicle with service type (TAXI_AND_DELIVERY or DELIVERY_ONLY)
+- CarOwner activates vehicle with availableUntil (lists for rent) — only after admin approval
+- CarOwner deactivates vehicle (removes from rent)
+- Vehicle is available when isActive=true AND availableUntil > now()
+- Vehicle validation: <= 9 years old, unique VIN, unique plate
 - Location masking: 1km radius until 2hrs before booking
-- Availability slots: 4h minimum, configurable by owner
 
 ---
 

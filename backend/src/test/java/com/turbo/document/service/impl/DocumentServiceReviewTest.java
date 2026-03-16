@@ -1,6 +1,5 @@
 package com.turbo.document.service.impl;
 
-import com.turbo.document.dto.AdminDocumentResponse;
 import com.turbo.document.fixture.DocumentFixture;
 import com.turbo.document.model.Document;
 import com.turbo.document.model.enums.DocumentStatus;
@@ -59,11 +58,6 @@ class DocumentServiceReviewTest {
         when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
-    private void mockMapperReturnsAdminResponse() {
-        when(documentServiceMapper.toAdminDocumentResponse(any(Document.class)))
-                .thenReturn(mock(AdminDocumentResponse.class));
-    }
-
     /** Mocks the verification check: returns docs for the driver's userId. */
     private void mockUserDocsForVerification(List<Document> docs) {
         when(documentRepository.findByUserUserId(DocumentFixture.DRIVER_USER_ID)).thenReturn(docs);
@@ -84,7 +78,6 @@ class DocumentServiceReviewTest {
             mockDriverFound();
             mockSave();
             mockUserDocsForVerification(List.of(doc));
-            mockMapperReturnsAdminResponse();
 
             documentService.reviewDocument(command);
 
@@ -103,7 +96,6 @@ class DocumentServiceReviewTest {
             mockDriverFound();
             mockSave();
             mockUserDocsForVerification(List.of(doc));
-            mockMapperReturnsAdminResponse();
 
             documentService.reviewDocument(command);
 
@@ -119,7 +111,6 @@ class DocumentServiceReviewTest {
             mockDocumentFound(doc);
             mockSave();
             mockUserDocsForVerification(List.of(doc));
-            mockMapperReturnsAdminResponse();
 
             documentService.reviewDocument(command);
 
@@ -135,7 +126,6 @@ class DocumentServiceReviewTest {
             ReviewDocumentCommand command = DocumentFixture.toCommand(DocumentFixture.rejectRequest());
             mockDocumentFound(doc);
             mockSave();
-            mockMapperReturnsAdminResponse();
 
             documentService.reviewDocument(command);
 
@@ -162,7 +152,6 @@ class DocumentServiceReviewTest {
             mockDocumentFound(license);
             mockDriverFound();
             mockSave();
-            mockMapperReturnsAdminResponse();
 
             // After approval, checkAndSetDriverVerification queries all user docs.
             // The license will have been set to APPROVED by approveDocument() in-memory.
@@ -189,7 +178,6 @@ class DocumentServiceReviewTest {
             mockDocumentFound(license);
             mockDriverFound();
             mockSave();
-            mockMapperReturnsAdminResponse();
 
             when(documentRepository.findByUserUserId(DocumentFixture.DRIVER_USER_ID))
                     .thenAnswer(inv -> {

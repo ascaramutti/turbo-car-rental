@@ -32,13 +32,15 @@ public class DocumentController {
             @RequestParam("documentType") String documentType) {
 
         User user = securityHelper.getCurrentUser();
-        return ResponseEntity.ok(documentService.uploadDocument(controllerMapper.toUploadCommand(file, documentType, user.getUserId())));
+        Document document = documentService.uploadDocument(controllerMapper.toUploadCommand(file, documentType, user.getUserId()));
+        return ResponseEntity.ok(controllerMapper.toDocumentResponse(document));
     }
 
     @GetMapping("/my")
     public ResponseEntity<List<DocumentResponse>> getMyDocuments() {
         User user = securityHelper.getCurrentUser();
-        return ResponseEntity.ok(documentService.getMyDocuments(user.getUserId()));
+        List<Document> documents = documentService.getMyDocuments(user.getUserId());
+        return ResponseEntity.ok(controllerMapper.toDocumentResponseList(documents));
     }
 
     @PutMapping("/{id}/reupload")
@@ -47,7 +49,8 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file) {
 
         User user = securityHelper.getCurrentUser();
-        return ResponseEntity.ok(documentService.reuploadDocument(controllerMapper.toReuploadCommand(id, file, user.getUserId())));
+        Document document = documentService.reuploadDocument(controllerMapper.toReuploadCommand(id, file, user.getUserId()));
+        return ResponseEntity.ok(controllerMapper.toDocumentResponse(document));
     }
 
     @GetMapping("/{id}/view")

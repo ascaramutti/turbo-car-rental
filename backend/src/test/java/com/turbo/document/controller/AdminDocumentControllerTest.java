@@ -67,8 +67,10 @@ class AdminDocumentControllerTest {
         @Test
         @DisplayName("Returns 200 with list of pending documents")
         void getPending_returns200() throws Exception {
-            AdminDocumentResponse doc = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null, null);
-            when(documentService.getPendingDocuments()).thenReturn(List.of(doc));
+            List<Document> documents = List.of(DocumentFixture.pendingLicense());
+            AdminDocumentResponse docResponse = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null, null, null);
+            when(documentService.getPendingDocuments()).thenReturn(documents);
+            when(controllerMapper.toAdminDocumentResponseList(documents)).thenReturn(List.of(docResponse));
 
             mockMvc.perform(get("/api/admin/documents/pending"))
                     .andExpect(status().isOk())
@@ -79,7 +81,9 @@ class AdminDocumentControllerTest {
         @Test
         @DisplayName("Returns 200 with empty list when no pending")
         void getPending_empty_returns200() throws Exception {
-            when(documentService.getPendingDocuments()).thenReturn(List.of());
+            List<Document> emptyDocs = List.of();
+            when(documentService.getPendingDocuments()).thenReturn(emptyDocs);
+            when(controllerMapper.toAdminDocumentResponseList(emptyDocs)).thenReturn(List.of());
 
             mockMvc.perform(get("/api/admin/documents/pending"))
                     .andExpect(status().isOk())
@@ -98,11 +102,13 @@ class AdminDocumentControllerTest {
         void review_approveClass4_returns200() throws Exception {
             ReviewDocumentRequest request = DocumentFixture.approveClass4Request();
             ReviewDocumentCommand command = DocumentFixture.toCommand(request);
-            AdminDocumentResponse response = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "APPROVED", null, null, DocumentFixture.ADMIN_USER_ID, null);
+            Document document = DocumentFixture.pendingLicense();
+            AdminDocumentResponse response = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "APPROVED", null, null, DocumentFixture.ADMIN_USER_ID, null, null);
 
             when(securityHelper.getCurrentUser()).thenReturn(DocumentFixture.testAdmin());
             when(controllerMapper.toReviewCommand(anyLong(), any(ReviewDocumentRequest.class), anyLong())).thenReturn(command);
-            when(documentService.reviewDocument(command)).thenReturn(response);
+            when(documentService.reviewDocument(command)).thenReturn(document);
+            when(controllerMapper.toAdminDocumentResponse(document)).thenReturn(response);
 
             mockMvc.perform(put("/api/admin/documents/100/review")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -118,11 +124,13 @@ class AdminDocumentControllerTest {
         void review_reject_returns200() throws Exception {
             ReviewDocumentRequest request = DocumentFixture.rejectRequest();
             ReviewDocumentCommand command = DocumentFixture.toCommand(request);
-            AdminDocumentResponse response = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "REJECTED", null, null, DocumentFixture.ADMIN_USER_ID, "Document is blurry");
+            Document document = DocumentFixture.pendingLicense();
+            AdminDocumentResponse response = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "REJECTED", null, null, DocumentFixture.ADMIN_USER_ID, "Document is blurry", null);
 
             when(securityHelper.getCurrentUser()).thenReturn(DocumentFixture.testAdmin());
             when(controllerMapper.toReviewCommand(anyLong(), any(ReviewDocumentRequest.class), anyLong())).thenReturn(command);
-            when(documentService.reviewDocument(command)).thenReturn(response);
+            when(documentService.reviewDocument(command)).thenReturn(document);
+            when(controllerMapper.toAdminDocumentResponse(document)).thenReturn(response);
 
             mockMvc.perform(put("/api/admin/documents/100/review")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -194,8 +202,10 @@ class AdminDocumentControllerTest {
         @Test
         @DisplayName("Returns 200 with user's documents")
         void getByUser_returns200() throws Exception {
-            AdminDocumentResponse doc = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null, null);
-            when(documentService.getDocumentsByUser(DocumentFixture.DRIVER_USER_ID)).thenReturn(List.of(doc));
+            List<Document> documents = List.of(DocumentFixture.pendingLicense());
+            AdminDocumentResponse docResponse = new AdminDocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "John Doe", "DRIVER", "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null, null, null);
+            when(documentService.getDocumentsByUser(DocumentFixture.DRIVER_USER_ID)).thenReturn(documents);
+            when(controllerMapper.toAdminDocumentResponseList(documents)).thenReturn(List.of(docResponse));
 
             mockMvc.perform(get("/api/admin/documents/user/" + DocumentFixture.DRIVER_USER_ID))
                     .andExpect(status().isOk())

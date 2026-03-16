@@ -1,6 +1,5 @@
 package com.turbo.document.service.impl;
 
-import com.turbo.document.dto.DocumentResponse;
 import com.turbo.document.fixture.DocumentFixture;
 import com.turbo.document.model.Document;
 import com.turbo.document.model.enums.DocumentStatus;
@@ -100,13 +99,11 @@ class DocumentServiceUploadTest {
             mockFileStorage();
             mockMapperBuildsDocument();
             mockSaveReturnsDocument();
-            when(documentServiceMapper.toDocumentResponse(any(Document.class)))
-                    .thenReturn(new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null));
 
-            DocumentResponse result = documentService.uploadDocument(command);
+            Document result = documentService.uploadDocument(command);
 
             assertThat(result).isNotNull();
-            assertThat(result.getStatus()).isEqualTo("PENDING");
+            assertThat(result.getStatus()).isEqualTo(DocumentStatus.PENDING);
         }
 
         @Test
@@ -118,10 +115,8 @@ class DocumentServiceUploadTest {
             mockFileStorage();
             mockMapperBuildsDocument();
             mockSaveReturnsDocument();
-            when(documentServiceMapper.toDocumentResponse(any(Document.class))).thenReturn(
-                    new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "STUDY_PERMIT", "permit.jpg", 1024L, "PENDING", null, null, null));
 
-            DocumentResponse result = documentService.uploadDocument(command);
+            Document result = documentService.uploadDocument(command);
 
             assertThat(result).isNotNull();
         }
@@ -142,7 +137,6 @@ class DocumentServiceUploadTest {
             mockFileStorage();
             mockMapperBuildsDocument();
             mockSaveReturnsDocument();
-            when(documentServiceMapper.toDocumentResponse(any())).thenReturn(mock(DocumentResponse.class));
 
             documentService.uploadDocument(command);
 
@@ -160,7 +154,6 @@ class DocumentServiceUploadTest {
             mockFileStorage();
             mockMapperBuildsDocument();
             mockSaveReturnsDocument();
-            when(documentServiceMapper.toDocumentResponse(any())).thenReturn(mock(DocumentResponse.class));
 
             documentService.uploadDocument(command);
 

@@ -12,6 +12,8 @@ import SignUpPage from './modules/auth/pages/SignUpPage';
 import VerifyOtpPage from './modules/auth/pages/VerifyOtpPage';
 import DriverDocumentsPage from './modules/documents/pages/DriverDocumentsPage';
 import AdminDocumentsPage from './modules/admin/pages/AdminDocumentsPage';
+import MyVehiclesPage from './modules/vehicles/pages/MyVehiclesPage';
+import VehicleDetailPage from './modules/vehicles/pages/VehicleDetailPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -60,6 +62,23 @@ export default function App() {
                 <div className="flex-1 flex items-center justify-center">
                   <h1 className="text-2xl text-text-dark">Driver Dashboard (Module 5)</h1>
                 </div>
+              </ProtectedRoute>
+            }
+          />
+          {/* Car Owner routes */}
+          <Route
+            path="/owner/vehicles"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
+                <MyVehiclesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/owner/vehicles/:id"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
+                <VehicleDetailPage />
               </ProtectedRoute>
             }
           />

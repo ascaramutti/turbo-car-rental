@@ -69,10 +69,12 @@ class DocumentControllerTest {
         void upload_validRequest_returns200() throws Exception {
             MockMultipartFile file = DocumentFixture.validPdf();
             UploadDocumentCommand command = new UploadDocumentCommand();
+            Document document = DocumentFixture.pendingLicense();
             DocumentResponse response = new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null);
 
             when(controllerMapper.toUploadCommand(any(), anyString(), anyLong())).thenReturn(command);
-            when(documentService.uploadDocument(command)).thenReturn(response);
+            when(documentService.uploadDocument(command)).thenReturn(document);
+            when(controllerMapper.toDocumentResponse(document)).thenReturn(response);
 
             mockMvc.perform(multipart("/api/driver/documents/upload")
                             .file(file)
@@ -94,8 +96,10 @@ class DocumentControllerTest {
         @Test
         @DisplayName("Returns 200 with list of documents")
         void getMyDocuments_returns200() throws Exception {
-            DocumentResponse doc = new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null);
-            when(documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID)).thenReturn(List.of(doc));
+            List<Document> documents = List.of(DocumentFixture.pendingLicense());
+            DocumentResponse docResponse = new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "DRIVERS_LICENSE", "license.pdf", 2048576L, "PENDING", null, null, null);
+            when(documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID)).thenReturn(documents);
+            when(controllerMapper.toDocumentResponseList(documents)).thenReturn(List.of(docResponse));
 
             mockMvc.perform(get("/api/driver/documents/my"))
                     .andExpect(status().isOk())
@@ -105,7 +109,9 @@ class DocumentControllerTest {
         @Test
         @DisplayName("Returns 200 with empty list when no documents")
         void getMyDocuments_empty_returns200() throws Exception {
-            when(documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID)).thenReturn(List.of());
+            List<Document> emptyDocs = List.of();
+            when(documentService.getMyDocuments(DocumentFixture.DRIVER_USER_ID)).thenReturn(emptyDocs);
+            when(controllerMapper.toDocumentResponseList(emptyDocs)).thenReturn(List.of());
 
             mockMvc.perform(get("/api/driver/documents/my"))
                     .andExpect(status().isOk())
@@ -124,10 +130,12 @@ class DocumentControllerTest {
         void reupload_validRequest_returns200() throws Exception {
             MockMultipartFile file = DocumentFixture.validPdf();
             ReuploadDocumentCommand command = new ReuploadDocumentCommand();
+            Document document = DocumentFixture.pendingLicense();
             DocumentResponse response = new DocumentResponse(1L, DocumentFixture.DRIVER_USER_ID, "DRIVERS_LICENSE", "new-license.pdf", 2048576L, "PENDING", null, null, null);
 
             when(controllerMapper.toReuploadCommand(anyLong(), any(), anyLong())).thenReturn(command);
-            when(documentService.reuploadDocument(command)).thenReturn(response);
+            when(documentService.reuploadDocument(command)).thenReturn(document);
+            when(controllerMapper.toDocumentResponse(document)).thenReturn(response);
 
             mockMvc.perform(multipart("/api/driver/documents/100/reupload")
                             .file(file)
