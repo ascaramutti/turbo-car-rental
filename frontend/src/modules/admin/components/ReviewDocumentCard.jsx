@@ -2,12 +2,18 @@ import { useState } from 'react';
 import { CheckCircle, XCircle, Loader2, FileText, User, Eye, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { reviewDocument, getAdminDocumentViewUrl, getAdminDocumentDownloadUrl } from '../api/adminDocumentApi';
+import { checkVehicleClassification } from '../api/adminVehicleApi';
 import { downloadFile } from '../../../shared/utils/downloadUtils';
 import FilePreviewModal from '../../../shared/components/common/FilePreviewModal';
+import VehicleClassificationModal from './VehicleClassificationModal';
 import { extractErrorMessage } from '../../auth/utils/validation';
 import { REVIEW_ACTIONS, LICENSE_CLASSES, LICENSE_CLASS_LABELS, REJECTION_REASON } from '../constants/adminConstants';
 import { DOCUMENT_LABELS, DOCUMENT_TYPES } from '../../documents/constants/documentConstants';
+import { VEHICLE_DOCUMENT_LABELS } from '../../vehicles/constants/vehicleConstants';
 import { formatDateTime } from '../../../shared/utils/dateUtils';
+
+/** Combined labels for all document types (driver + vehicle). */
+const ALL_DOCUMENT_LABELS = { ...DOCUMENT_LABELS, ...VEHICLE_DOCUMENT_LABELS };
 
 
 /**
@@ -22,10 +28,11 @@ export default function ReviewDocumentCard({ document, onReviewed }) {
   const [rejectionReason, setRejectionReason] = useState('');
   const [selectedLicenseClass, setSelectedLicenseClass] = useState(LICENSE_CLASSES.CLASS_4);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [classificationData, setClassificationData] = useState(null);
 
   const isLicense = document.documentType === DOCUMENT_TYPES.DRIVERS_LICENSE;
 
-  /** Submits an approval review to the API. */
+  /** Submits an approval review to the API and checks vehicle classification readiness. */
   const handleApprove = async () => {
     const reviewData = { action: REVIEW_ACTIONS.APPROVE };
     if (isLicense) {
@@ -34,8 +41,17 @@ export default function ReviewDocumentCard({ document, onReviewed }) {
 
     setIsSubmitting(true);
     try {
-      await reviewDocument(document.documentId, reviewData);
-      toast.success(`${DOCUMENT_LABELS[document.documentType]} approved`);
+      const { data } = await reviewDocument(document.documentId, reviewData);
+      toast.success(`${ALL_DOCUMENT_LABELS[document.documentType]} approved`);
+
+      if (data.vehicleId) {
+        const { data: classification } = await checkVehicleClassification(data.vehicleId);
+        if (classification.readyForClassification) {
+          setClassificationData(classification);
+          return;
+        }
+      }
+
       onReviewed();
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -77,7 +93,7 @@ export default function ReviewDocumentCard({ document, onReviewed }) {
         action: REVIEW_ACTIONS.REJECT,
         rejectionReason: rejectionReason.trim(),
       });
-      toast.success(`${DOCUMENT_LABELS[document.documentType]} rejected`);
+      toast.success(`${ALL_DOCUMENT_LABELS[document.documentType]} rejected`);
       onReviewed();
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -101,7 +117,7 @@ export default function ReviewDocumentCard({ document, onReviewed }) {
         </div>
         <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5">
           <FileText size={14} className="text-text-gray" />
-          <span className="text-sm font-semibold text-text-dark">{DOCUMENT_LABELS[document.documentType]}</span>
+          <span className="text-sm font-semibold text-text-dark">{ALL_DOCUMENT_LABELS[document.documentType]}</span>
         </div>
       </div>
 
@@ -217,6 +233,14 @@ export default function ReviewDocumentCard({ document, onReviewed }) {
           fileUrl={getAdminDocumentViewUrl(document.documentId)}
           fileName={document.fileName}
           onClose={() => setShowPreview(false)}
+        />
+      )}
+
+      {classificationData && (
+        <VehicleClassificationModal
+          classificationData={classificationData}
+          onClassified={() => { setClassificationData(null); onReviewed(); }}
+          onClose={() => { setClassificationData(null); onReviewed(); }}
         />
       )}
     </div>
