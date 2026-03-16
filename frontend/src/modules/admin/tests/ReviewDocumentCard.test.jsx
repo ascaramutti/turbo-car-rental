@@ -17,6 +17,10 @@ vi.mock('../api/adminDocumentApi', async (importOriginal) => {
     reviewDocument: vi.fn(),
   };
 });
+vi.mock('../api/adminVehicleApi', () => ({
+  checkVehicleClassification: vi.fn(),
+  approveVehicle: vi.fn(),
+}));
 vi.mock('../../../shared/utils/downloadUtils');
 vi.mock('react-pdf', () => ({
   Document: ({ children }) => <div>{children}</div>,
@@ -158,7 +162,7 @@ describe('ReviewDocumentCard — rendering and actions', () => {
 
   it('handleApprove calls reviewDocument with APPROVE action and CLASS_4 by default', async () => {
     const user = userEvent.setup();
-    adminDocumentApi.reviewDocument.mockResolvedValue({});
+    adminDocumentApi.reviewDocument.mockResolvedValue({ data: { vehicleId: null } });
     renderWithProviders(<ReviewDocumentCard document={PENDING_LICENSE} onReviewed={onReviewed} />);
 
     await user.click(screen.getByText('Approve'));
@@ -176,7 +180,7 @@ describe('ReviewDocumentCard — rendering and actions', () => {
 
   it('handleApprove calls reviewDocument with CLASS_5 when selected', async () => {
     const user = userEvent.setup();
-    adminDocumentApi.reviewDocument.mockResolvedValue({});
+    adminDocumentApi.reviewDocument.mockResolvedValue({ data: { vehicleId: null } });
     renderWithProviders(<ReviewDocumentCard document={PENDING_LICENSE} onReviewed={onReviewed} />);
 
     await user.click(screen.getByText('Class 5 — Delivery Only'));
@@ -195,7 +199,7 @@ describe('ReviewDocumentCard — rendering and actions', () => {
 
   it('handleReject calls reviewDocument with REJECT action and reason', async () => {
     const user = userEvent.setup();
-    adminDocumentApi.reviewDocument.mockResolvedValue({});
+    adminDocumentApi.reviewDocument.mockResolvedValue({ data: { vehicleId: null } });
     renderWithProviders(<ReviewDocumentCard document={PENDING_LICENSE} onReviewed={onReviewed} />);
 
     await user.click(screen.getByText('Reject'));
