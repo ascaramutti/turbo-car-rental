@@ -1,7 +1,5 @@
 package com.turbo.document.service.impl;
 
-import com.turbo.document.dto.AdminDocumentResponse;
-import com.turbo.document.dto.DocumentResponse;
 import com.turbo.document.model.Document;
 import com.turbo.document.model.enums.DocumentStatus;
 import com.turbo.document.model.enums.DocumentType;
@@ -41,29 +39,29 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    public DocumentResponse uploadDocument(UploadDocumentCommand command) {
+    public Document uploadDocument(UploadDocumentCommand command) {
         User user = findUserById(command.getUserId());
         validateIsDriver(user);
 
         DocumentType documentType = parseDocumentType(command.getDocumentType());
+        validateIsDriverDocumentType(documentType);
         validateFile(command.getFile());
         validateNoDuplicate(user.getUserId(), documentType);
 
         String fileUrl = fileStorageService.store(command.getFile(), user.getUserId(), documentType.name());
         Document document = documentServiceMapper.toNewDocument(user, documentType, fileUrl, command.getFile());
 
-        document = documentRepository.save(document);
-        return documentServiceMapper.toDocumentResponse(document);
+        return documentRepository.save(document);
     }
 
     @Override
-    public List<DocumentResponse> getMyDocuments(Long userId) {
-        return documentServiceMapper.toDocumentResponseList(documentRepository.findByUserUserId(userId));
+    public List<Document> getMyDocuments(Long userId) {
+        return documentRepository.findByUserUserId(userId);
     }
 
     @Override
     @Transactional
-    public DocumentResponse reuploadDocument(ReuploadDocumentCommand command) {
+    public Document reuploadDocument(ReuploadDocumentCommand command) {
         Document document = findDocumentById(command.getDocumentId());
         validateOwnership(document, command.getUserId());
         validateReuploadAllowed(document);
@@ -73,18 +71,17 @@ public class DocumentServiceImpl implements DocumentService {
         String newFileUrl = fileStorageService.store(command.getFile(), command.getUserId(), document.getDocumentType().name());
 
         documentServiceMapper.updateDocumentForReupload(newFileUrl, command.getFile(), document);
-        document = documentRepository.save(document);
-        return documentServiceMapper.toDocumentResponse(document);
+        return documentRepository.save(document);
     }
 
     @Override
-    public List<AdminDocumentResponse> getPendingDocuments() {
-        return documentServiceMapper.toAdminDocumentResponseList(documentRepository.findByStatus(DocumentStatus.PENDING));
+    public List<Document> getPendingDocuments() {
+        return documentRepository.findByStatus(DocumentStatus.PENDING);
     }
 
     @Override
     @Transactional
-    public AdminDocumentResponse reviewDocument(ReviewDocumentCommand command) {
+    public Document reviewDocument(ReviewDocumentCommand command) {
         Document document = findDocumentById(command.getDocumentId());
         validateDocumentIsPending(document);
 
@@ -97,14 +94,13 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         documentServiceMapper.applyReviewMetadata(command.getAdminId(), document);
-        document = documentRepository.save(document);
-        return documentServiceMapper.toAdminDocumentResponse(document);
+        return documentRepository.save(document);
     }
 
     @Override
-    public List<AdminDocumentResponse> getDocumentsByUser(Long userId) {
+    public List<Document> getDocumentsByUser(Long userId) {
         findUserById(userId);
-        return documentServiceMapper.toAdminDocumentResponseList(documentRepository.findByUserUserId(userId));
+        return documentRepository.findByUserUserId(userId);
     }
 
     @Override
@@ -131,6 +127,13 @@ public class DocumentServiceImpl implements DocumentService {
     private void validateIsDriver(User user) {
         if (!(user instanceof Driver)) {
             throw new BusinessException(DocumentErrorCode.NOT_A_DRIVER);
+        }
+    }
+
+    /** Validates that the document type is valid for driver uploads (DRIVERS_LICENSE or STUDY_PERMIT). */
+    private void validateIsDriverDocumentType(DocumentType documentType) {
+        if (!DocumentValidationConstraints.DRIVER_DOCUMENT_TYPES.contains(documentType)) {
+            throw new BusinessException(DocumentErrorCode.INVALID_DOCUMENT_TYPE);
         }
     }
 

@@ -3,10 +3,25 @@ package com.turbo.document.validation;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
+import com.turbo.document.model.enums.DocumentType;
+
 import java.util.Set;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DocumentValidationConstraints {
+
+    /** Document types valid for driver personal document uploads (Module 2). */
+    public static final Set<DocumentType> DRIVER_DOCUMENT_TYPES = Set.of(
+            DocumentType.DRIVERS_LICENSE,
+            DocumentType.STUDY_PERMIT
+    );
+
+    /** Document types valid for vehicle document uploads (Module 3). */
+    public static final Set<DocumentType> VEHICLE_DOCUMENT_TYPES = Set.of(
+            DocumentType.INSURANCE,
+            DocumentType.VEHICLE_REGISTRATION,
+            DocumentType.INSPECTION_REPORT
+    );
 
     public static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024;
     public static final int MAX_REJECTION_REASON_LENGTH = 500;
@@ -27,8 +42,4 @@ public final class DocumentValidationConstraints {
             "image/png"
     );
 
-    /** Allowed file extensions for document uploads. */
-    public static final Set<String> ALLOWED_EXTENSIONS = Set.of(
-            "pdf", "jpg", "jpeg", "png"
-    );
 }

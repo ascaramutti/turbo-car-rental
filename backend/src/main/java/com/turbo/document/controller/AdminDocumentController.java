@@ -29,7 +29,8 @@ public class AdminDocumentController {
 
     @GetMapping("/pending")
     public ResponseEntity<List<AdminDocumentResponse>> getPendingDocuments() {
-        return ResponseEntity.ok(documentService.getPendingDocuments());
+        List<Document> documents = documentService.getPendingDocuments();
+        return ResponseEntity.ok(controllerMapper.toAdminDocumentResponseList(documents));
     }
 
     @PutMapping("/{id}/review")
@@ -38,12 +39,14 @@ public class AdminDocumentController {
             @Valid @RequestBody ReviewDocumentRequest request) {
 
         User admin = securityHelper.getCurrentUser();
-        return ResponseEntity.ok(documentService.reviewDocument(controllerMapper.toReviewCommand(id, request, admin.getUserId())));
+        Document document = documentService.reviewDocument(controllerMapper.toReviewCommand(id, request, admin.getUserId()));
+        return ResponseEntity.ok(controllerMapper.toAdminDocumentResponse(document));
     }
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<AdminDocumentResponse>> getDocumentsByUser(@PathVariable Long userId) {
-        return ResponseEntity.ok(documentService.getDocumentsByUser(userId));
+        List<Document> documents = documentService.getDocumentsByUser(userId);
+        return ResponseEntity.ok(controllerMapper.toAdminDocumentResponseList(documents));
     }
 
     @GetMapping("/{id}/view")

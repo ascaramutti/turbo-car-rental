@@ -1,7 +1,5 @@
 package com.turbo.document.service;
 
-import com.turbo.document.dto.AdminDocumentResponse;
-import com.turbo.document.dto.DocumentResponse;
 import com.turbo.document.model.Document;
 import com.turbo.document.service.command.ReuploadDocumentCommand;
 import com.turbo.document.service.command.ReviewDocumentCommand;
@@ -11,17 +9,17 @@ import java.util.List;
 
 public interface DocumentService {
 
-    DocumentResponse uploadDocument(UploadDocumentCommand command);
+    Document uploadDocument(UploadDocumentCommand command);
 
-    List<DocumentResponse> getMyDocuments(Long userId);
+    List<Document> getMyDocuments(Long userId);
 
-    DocumentResponse reuploadDocument(ReuploadDocumentCommand command);
+    Document reuploadDocument(ReuploadDocumentCommand command);
 
-    List<AdminDocumentResponse> getPendingDocuments();
+    List<Document> getPendingDocuments();
 
-    AdminDocumentResponse reviewDocument(ReviewDocumentCommand command);
+    Document reviewDocument(ReviewDocumentCommand command);
 
-    List<AdminDocumentResponse> getDocumentsByUser(Long userId);
+    List<Document> getDocumentsByUser(Long userId);
 
     Document getDocumentForDownload(Long documentId, Long userId);
 
