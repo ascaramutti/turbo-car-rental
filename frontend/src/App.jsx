@@ -14,6 +14,12 @@ import DriverDocumentsPage from './modules/documents/pages/DriverDocumentsPage';
 import AdminDocumentsPage from './modules/admin/pages/AdminDocumentsPage';
 import MyVehiclesPage from './modules/vehicles/pages/MyVehiclesPage';
 import VehicleDetailPage from './modules/vehicles/pages/VehicleDetailPage';
+import DriverSearchPage from './modules/booking/pages/DriverSearchPage';
+import DriverVehicleDetailPage from './modules/booking/pages/DriverVehicleDetailPage';
+import DriverBookingsPage from './modules/booking/pages/DriverBookingsPage';
+import DriverBookingDetailPage from './modules/booking/pages/DriverBookingDetailPage';
+import OwnerBookingsPage from './modules/booking/pages/OwnerBookingsPage';
+import OwnerBookingDetailPage from './modules/booking/pages/OwnerBookingDetailPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -56,6 +62,38 @@ export default function App() {
             }
           />
           <Route
+            path="/driver/search"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.DRIVER]}>
+                <DriverSearchPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver/search/:vehicleId"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.DRIVER]}>
+                <DriverVehicleDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver/bookings"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.DRIVER]}>
+                <DriverBookingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver/bookings/:id"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.DRIVER]}>
+                <DriverBookingDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/driver/dashboard"
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.DRIVER]}>
@@ -79,6 +117,22 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
                 <VehicleDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/owner/bookings"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
+                <OwnerBookingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/owner/bookings/:id"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
+                <OwnerBookingDetailPage />
               </ProtectedRoute>
             }
           />

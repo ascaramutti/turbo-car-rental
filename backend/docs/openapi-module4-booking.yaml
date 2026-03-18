@@ -1,0 +1,2115 @@
+openapi: 3.0.3
+info:
+  title: TURBO - Module 4 (Booking Orchestrator)
+  description: |
+    API contract for the Booking Orchestrator module of the TURBO peer-to-peer car rental platform.
+
+    ## Scope
+    This module handles the **complete booking lifecycle**: vehicle search, booking creation,
+    owner confirmation/rejection, shift start/complete with photo documentation, and cancellation
+    by either party. It connects the "supply" side (vehicles from Module 3) with the "demand"
+    side (verified drivers from Module 2).
+
+    ## Booking Flow
+    1. Driver searches available vehicles via `GET /driver/bookings/vehicles/search`
+    2. Driver views vehicle details via `GET /driver/bookings/vehicles/{vehicleId}`
+    3. Driver creates a booking via `POST /driver/bookings`
+    4. Owner confirms or rejects via `PUT /owner/bookings/{id}/confirm` or `.../reject`
+    5. Driver starts shift with pickup photo via `PUT /driver/bookings/{id}/start`
+    6. Driver completes shift with return photo via `PUT /driver/bookings/{id}/complete`
+
+    ## Business Rules
+    - Minimum booking duration: 4 hours
+    - Maximum booking duration: 24 hours (study permit restriction)
+    - Driver must be verified (`isVerified == true`) to create bookings
+    - Vehicle must be APPROVED and active with `availableUntil > endTime`
+    - Pickup photo required to start shift, return photo required to complete
+    - Exact vehicle location revealed 2 hours before confirmed booking start time
+    - PENDING bookings auto-cancel when `startTime` arrives without owner response
+    - IN_PROGRESS bookings auto-complete 2 hours after `endTime`
+    - Service type matching is informational only (warnings, not blocks)
+
+    ## State Machine
+    ```
+    PENDING -> CONFIRMED -> IN_PROGRESS -> COMPLETED
+    PENDING -> REJECTED
+    PENDING -> CANCELLED
+    CONFIRMED -> CANCELLED
+    ```
+
+    ## Security
+    - `/api/driver/**` requires JWT with DRIVER authority
+    - `/api/owner/**` requires JWT with CAR_OWNER authority
+    - `/api/admin/**` requires JWT with ADMIN authority
+  version: 1.0.0
+  contact:
+    name: TURBO Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://localhost/api
+    description: Docker (via nginx)
+
+tags:
+  - name: DriverBooking
+    description: Driver booking operations — search vehicles, create/manage bookings (secured by DRIVER role)
+  - name: OwnerBooking
+    description: Car owner booking operations — confirm, reject, cancel bookings (secured by CAR_OWNER role)
+  - name: AdminBooking
+    description: Admin booking operations — view all bookings for platform oversight (secured by ADMIN role)
+
+paths:
+  # ── Driver: Vehicle Search ──────────────────────────────────────
+
+  /api/driver/bookings/vehicles/search:
+    get:
+      tags: [DriverBooking]
+      summary: Search available vehicles
+      description: |
+        Searches for available vehicles matching the given filters. Only vehicles with
+        `status == APPROVED`, `isActive == true`, and `availableUntil > now()` are returned.
+        Coordinates are masked to ~1km radius for privacy. If `startTime` and `endTime` are
+        provided, vehicles with conflicting bookings (PENDING/CONFIRMED/IN_PROGRESS) are excluded.
+        Geo-radius filtering uses the Haversine formula in-memory.
+        Each result includes `effectiveServiceType` and `serviceTypeWarning` based on the
+        driver's license class and the vehicle's service classification.
+        Requires JWT authentication with DRIVER role.
+      operationId: searchAvailableVehicles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: latitude
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          description: "Driver's current latitude for proximity search"
+          example: 49.28
+        - name: longitude
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          description: "Driver's current longitude for proximity search"
+          example: -123.12
+        - name: radiusKm
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 1
+            maximum: 100
+            default: 10.0
+          description: "Search radius in kilometers (default: 10.0)"
+          example: 10.0
+        - name: startTime
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: "Desired shift start time. Filters out vehicles with conflicting bookings. Must be in the future."
+          example: "2026-03-20T08:00:00"
+        - name: endTime
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: "Desired shift end time. Must be after startTime."
+          example: "2026-03-20T16:00:00"
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^(SEDAN|SUV|VAN|TRUCK|COMPACT)$"
+            enum: [SEDAN, SUV, VAN, TRUCK, COMPACT]
+          description: "Vehicle category filter"
+        - name: serviceType
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^(TAXI_AND_DELIVERY|DELIVERY_ONLY)$"
+            enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+          description: "Service type filter (filters by vehicle classification)"
+        - name: minPrice
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+          description: "Minimum hourly rate filter"
+          example: 10
+        - name: maxPrice
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+          description: "Maximum hourly rate filter"
+          example: 30
+        - name: fuelType
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^(GASOLINE|DIESEL|ELECTRIC|HYBRID)$"
+            enum: [GASOLINE, DIESEL, ELECTRIC, HYBRID]
+          description: "Fuel type filter"
+      responses:
+        '200':
+          description: List of available vehicles matching filters (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VehicleSearchResponse'
+              example:
+                - vehicleId: 5
+                  make: "Toyota"
+                  model: "Corolla"
+                  year: 2022
+                  category: "SEDAN"
+                  fuelType: "GASOLINE"
+                  serviceType: "TAXI_AND_DELIVERY"
+                  hourlyRate: 15.50
+                  description: "Well-maintained sedan, ideal for ride-sharing"
+                  generalLocation: "Downtown Vancouver"
+                  maskedLatitude: 49.28
+                  maskedLongitude: -123.12
+                  availableUntil: "2026-03-25T18:00:00"
+                  ownerFullName: "Jane Smith"
+                  ownerRating: 4.5
+                  effectiveServiceType: "TAXI_AND_DELIVERY"
+                  serviceTypeWarning: null
+        '401':
+          description: Not authenticated (Spring Security blocks at filter level, no JSON body)
+
+  # ── Driver: Vehicle Detail ──────────────────────────────────────
+
+  /api/driver/bookings/vehicles/{vehicleId}:
+    get:
+      tags: [DriverBooking]
+      summary: View vehicle details for booking
+      description: |
+        Returns full vehicle details for booking consideration. Location is still masked (~1km radius).
+        Includes additional fields not shown in search results: licensePlate, ownerId, vin.
+        Requires JWT authentication with DRIVER role.
+      operationId: getVehicleBookingDetail
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Vehicle ID
+      responses:
+        '200':
+          description: Full vehicle details (location still masked)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleBookingDetailResponse'
+              example:
+                vehicleId: 5
+                make: "Toyota"
+                model: "Corolla"
+                year: 2022
+                category: "SEDAN"
+                fuelType: "GASOLINE"
+                serviceType: "TAXI_AND_DELIVERY"
+                hourlyRate: 15.50
+                description: "Well-maintained sedan, ideal for ride-sharing"
+                generalLocation: "Downtown Vancouver"
+                maskedLatitude: 49.28
+                maskedLongitude: -123.12
+                availableUntil: "2026-03-25T18:00:00"
+                ownerFullName: "Jane Smith"
+                ownerRating: 4.5
+                effectiveServiceType: "TAXI_AND_DELIVERY"
+                serviceTypeWarning: null
+                licensePlate: "ABC 1234"
+                ownerId: 3
+                vin: "1HGBH41JXMN109186"
+        '401':
+          description: Not authenticated
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Driver: Create Booking ──────────────────────────────────────
+
+  /api/driver/bookings:
+    post:
+      tags: [DriverBooking]
+      summary: Create a new booking
+      description: |
+        Creates a new booking for the specified vehicle and time range. The driver must be verified.
+        The system validates: vehicle availability, time constraints (min 4h, max 24h, future start),
+        no overlapping bookings for the vehicle or the driver, and that the driver is not the vehicle owner.
+        Price is calculated as `totalHours * vehicle.hourlyRate` and stored at creation time.
+        Booking starts in PENDING status awaiting owner confirmation.
+        An email notification is sent to the vehicle owner.
+        Requires JWT authentication with DRIVER role.
+      operationId: createBooking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+            example:
+              vehicleId: 5
+              startTime: "2026-03-20T08:00:00"
+              endTime: "2026-03-20T16:00:00"
+      responses:
+        '200':
+          description: Booking created successfully with status PENDING
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "PENDING"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Validation or business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                vehicleNotApproved:
+                  summary: Vehicle not approved (BOOK-002)
+                  value:
+                    code: BOOK-002
+                    message: "Vehicle is not approved for rentals"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                vehicleNotActive:
+                  summary: Vehicle not active (BOOK-003)
+                  value:
+                    code: BOOK-003
+                    message: "Vehicle is not currently available for rent"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                exceedsAvailability:
+                  summary: End time exceeds vehicle availability (BOOK-004)
+                  value:
+                    code: BOOK-004
+                    message: "Booking end time exceeds vehicle availability window"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                startNotFuture:
+                  summary: Start time not in future (BOOK-005)
+                  value:
+                    code: BOOK-005
+                    message: "Booking start time must be in the future"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                endBeforeStart:
+                  summary: End time before start time (BOOK-006)
+                  value:
+                    code: BOOK-006
+                    message: "Booking end time must be after start time"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                tooShort:
+                  summary: Duration less than 4 hours (BOOK-007)
+                  value:
+                    code: BOOK-007
+                    message: "Minimum booking duration is 4 hours"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                tooLong:
+                  summary: Duration exceeds 24 hours (BOOK-025)
+                  value:
+                    code: BOOK-025
+                    message: "Maximum booking duration is 24 hours"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                ownVehicle:
+                  summary: Cannot book own vehicle (BOOK-009)
+                  value:
+                    code: BOOK-009
+                    message: "You cannot book your own vehicle"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                validationError:
+                  summary: Field validation errors (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    error: "Validation Failed"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                    details:
+                      vehicleId: "Vehicle ID is required"
+                      startTime: "Start time is required"
+        '403':
+          description: Driver not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-001
+                message: "Driver must be verified before creating bookings"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '404':
+          description: Vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: VEH-004
+                message: "Vehicle not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+        '409':
+          description: Time slot conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                vehicleConflict:
+                  summary: Vehicle already booked (BOOK-008)
+                  value:
+                    code: BOOK-008
+                    message: "Vehicle is already booked for the requested time slot"
+                    status: 409
+                    timestamp: "2026-03-17T10:00:00.000"
+                driverConflict:
+                  summary: Driver has overlapping booking (BOOK-010)
+                  value:
+                    code: BOOK-010
+                    message: "You already have an active booking during this time slot"
+                    status: 409
+                    timestamp: "2026-03-17T10:00:00.000"
+
+    # ── Driver: List My Bookings ────────────────────────────────────
+
+    get:
+      tags: [DriverBooking]
+      summary: List my bookings (as driver)
+      description: |
+        Returns all bookings created by the authenticated driver. Optionally filter by booking status.
+        Requires JWT authentication with DRIVER role.
+      operationId: listDriverBookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^(PENDING|CONFIRMED|IN_PROGRESS|COMPLETED|CANCELLED|REJECTED)$"
+            enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, REJECTED]
+          description: "Filter bookings by status (optional)"
+      responses:
+        '200':
+          description: List of driver's bookings (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+              example:
+                - bookingId: 1
+                  driverId: 2
+                  driverFullName: "John Doe"
+                  vehicleId: 5
+                  vehicleSummary: "2022 Toyota Corolla"
+                  status: "CONFIRMED"
+                  startTime: "2026-03-20T08:00:00"
+                  endTime: "2026-03-20T16:00:00"
+                  totalHours: 8
+                  totalPrice: 124.00
+                  createdAt: "2026-03-17T10:00:00.000"
+                - bookingId: 2
+                  driverId: 2
+                  driverFullName: "John Doe"
+                  vehicleId: 8
+                  vehicleSummary: "2021 Honda Civic"
+                  status: "PENDING"
+                  startTime: "2026-03-22T09:00:00"
+                  endTime: "2026-03-22T17:00:00"
+                  totalHours: 8
+                  totalPrice: 96.00
+                  createdAt: "2026-03-17T11:00:00.000"
+        '401':
+          description: Not authenticated
+
+  # ── Driver: Get Booking Detail ──────────────────────────────────
+
+  /api/driver/bookings/{bookingId}:
+    get:
+      tags: [DriverBooking]
+      summary: Get booking details (driver view)
+      description: |
+        Returns full booking details for the authenticated driver. Includes vehicle info, owner info,
+        photos, cancellation details, and timestamps. Location is masked unless within 2 hours of
+        a CONFIRMED/IN_PROGRESS booking start time.
+        Requires JWT authentication with DRIVER role.
+      operationId: getDriverBookingDetail
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      responses:
+        '200':
+          description: Full booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "CONFIRMED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+                ownerId: 3
+                ownerFullName: "Jane Smith"
+                vehicleMake: "Toyota"
+                vehicleModel: "Corolla"
+                vehicleYear: 2022
+                vehicleLicensePlate: "ABC 1234"
+                vehicleCategory: "SEDAN"
+                vehicleServiceType: "TAXI_AND_DELIVERY"
+                vehicleHourlyRate: 15.50
+                pickupLocation: "Downtown Vancouver"
+                pickupPhotoUrls: []
+                returnPhotoUrls: []
+                cancellationReason: null
+                cancelledBy: null
+                confirmedAt: "2026-03-17T12:00:00.000"
+                startedAt: null
+                completedAt: null
+                cancelledAt: null
+        '401':
+          description: Not authenticated
+        '403':
+          description: Booking does not belong to the authenticated driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Driver: Cancel Booking ──────────────────────────────────────
+
+  /api/driver/bookings/{bookingId}/cancel:
+    put:
+      tags: [DriverBooking]
+      summary: Cancel a pending or confirmed booking (driver)
+      description: |
+        Cancels a booking that is in PENDING or CONFIRMED status. A cancellation reason is required.
+        Sets `cancelledBy = "DRIVER"`. An email notification is sent to the vehicle owner.
+        Requires JWT authentication with DRIVER role.
+      operationId: cancelBookingByDriver
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+            example:
+              reason: "Schedule conflict, cannot make it"
+      responses:
+        '200':
+          description: Booking cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "CANCELLED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Invalid status or missing reason
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidStatus:
+                  summary: Booking not in cancellable status (BOOK-015)
+                  value:
+                    code: BOOK-015
+                    message: "Only pending or confirmed bookings can be cancelled"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                missingReason:
+                  summary: Missing cancellation reason (BOOK-022)
+                  value:
+                    code: BOOK-022
+                    message: "Cancellation reason is required"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Booking does not belong to the authenticated driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Driver: Start Shift ─────────────────────────────────────────
+
+  /api/driver/bookings/{bookingId}/start:
+    put:
+      tags: [DriverBooking]
+      summary: Start shift (pickup with photo)
+      description: |
+        Starts the booking shift by transitioning from CONFIRMED to IN_PROGRESS.
+        Between 1 and 10 pickup photos (multipart/form-data) are required as condition evidence.
+        The driver must be within the allowed start window: no earlier than 15 minutes
+        before `startTime` and no later than 1 hour after `startTime`.
+        Photos are stored in Docker volume at `bookings/{bookingId}/pickup/`.
+        Requires JWT authentication with DRIVER role.
+      operationId: startBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pickupPhotos]
+              properties:
+                pickupPhotos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  minItems: 1
+                  maxItems: 10
+                  description: "Pickup condition photos (1-10 files). Allowed formats: JPG, JPEG, PNG. Max 5MB per file."
+      responses:
+        '200':
+          description: Shift started, status changed to IN_PROGRESS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "IN_PROGRESS"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Invalid status, timing, or missing photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notConfirmed:
+                  summary: Booking not in CONFIRMED status (BOOK-016)
+                  value:
+                    code: BOOK-016
+                    message: "Only confirmed bookings can be started"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                tooEarly:
+                  summary: Too early to start (BOOK-017)
+                  value:
+                    code: BOOK-017
+                    message: "Booking cannot be started yet (too early)"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                windowExpired:
+                  summary: Start window expired (BOOK-018)
+                  value:
+                    code: BOOK-018
+                    message: "Booking start window has expired"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                noPhoto:
+                  summary: Missing pickup photo (BOOK-020)
+                  value:
+                    code: BOOK-020
+                    message: "At least one pickup photo is required to start the shift"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                tooManyPhotos:
+                  summary: More than 10 photos uploaded (BOOK-026)
+                  value:
+                    code: BOOK-026
+                    message: "Maximum 10 photos allowed per upload"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                invalidFormat:
+                  summary: Invalid photo format (DOC-001)
+                  value:
+                    code: DOC-001
+                    message: "Invalid file format. Only JPG, JPEG, and PNG are allowed"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                fileTooLarge:
+                  summary: Photo exceeds 5MB (DOC-002)
+                  value:
+                    code: DOC-002
+                    message: "File size exceeds the maximum allowed size of 5MB"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Booking does not belong to the authenticated driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Driver: Complete Shift ──────────────────────────────────────
+
+  /api/driver/bookings/{bookingId}/complete:
+    put:
+      tags: [DriverBooking]
+      summary: Complete shift (return with photo)
+      description: |
+        Completes the booking shift by transitioning from IN_PROGRESS to COMPLETED.
+        Between 1 and 10 return photos (multipart/form-data) are required as condition evidence.
+        Photos are stored in Docker volume at `bookings/{bookingId}/return/`.
+        An email notification is sent to the vehicle owner.
+        Requires JWT authentication with DRIVER role.
+      operationId: completeBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [returnPhotos]
+              properties:
+                returnPhotos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  minItems: 1
+                  maxItems: 10
+                  description: "Return condition photos (1-10 files). Allowed formats: JPG, JPEG, PNG. Max 5MB per file."
+      responses:
+        '200':
+          description: Shift completed, status changed to COMPLETED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "COMPLETED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Invalid status or missing photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notInProgress:
+                  summary: Booking not in IN_PROGRESS status (BOOK-019)
+                  value:
+                    code: BOOK-019
+                    message: "Only in-progress bookings can be completed"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                noPhoto:
+                  summary: Missing return photo (BOOK-021)
+                  value:
+                    code: BOOK-021
+                    message: "At least one return photo is required to complete the shift"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                tooManyPhotos:
+                  summary: More than 10 photos uploaded (BOOK-026)
+                  value:
+                    code: BOOK-026
+                    message: "Maximum 10 photos allowed per upload"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                invalidFormat:
+                  summary: Invalid photo format (DOC-001)
+                  value:
+                    code: DOC-001
+                    message: "Invalid file format. Only JPG, JPEG, and PNG are allowed"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                fileTooLarge:
+                  summary: Photo exceeds 5MB (DOC-002)
+                  value:
+                    code: DOC-002
+                    message: "File size exceeds the maximum allowed size of 5MB"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Booking does not belong to the authenticated driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Driver: Vehicle Location ────────────────────────────────────
+
+  /api/driver/bookings/{bookingId}/vehicle-location:
+    get:
+      tags: [DriverBooking]
+      summary: Get vehicle location (masked or exact)
+      description: |
+        Returns the vehicle pickup location for the booking. The location is masked (~1km radius)
+        by default and becomes exact when the booking is CONFIRMED/IN_PROGRESS and within 2 hours
+        of the start time. For COMPLETED bookings, exact location is returned for reference.
+        Only valid for bookings in CONFIRMED, IN_PROGRESS, or COMPLETED status.
+        Requires JWT authentication with DRIVER role.
+      operationId: getVehicleLocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      responses:
+        '200':
+          description: Vehicle location (masked or exact depending on timing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleLocationResponse'
+              examples:
+                masked:
+                  summary: Masked location (more than 2h before start)
+                  value:
+                    vehicleId: 5
+                    isExactLocation: false
+                    generalLocation: "Downtown Vancouver"
+                    latitude: 49.28
+                    longitude: -123.12
+                    message: "Exact location will be available 2 hours before your booking"
+                exact:
+                  summary: Exact location (within 2h of start)
+                  value:
+                    vehicleId: 5
+                    isExactLocation: true
+                    generalLocation: "Downtown Vancouver"
+                    latitude: 49.2827
+                    longitude: -123.1207
+                    message: "Exact pickup location is now available"
+        '400':
+          description: Booking not in valid status for location reveal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-016
+                message: "Only confirmed bookings can be started"
+                status: 400
+                timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Booking does not belong to the authenticated driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Owner: List Bookings ────────────────────────────────────────
+
+  /api/owner/bookings:
+    get:
+      tags: [OwnerBooking]
+      summary: List bookings for my vehicles
+      description: |
+        Returns all bookings for vehicles owned by the authenticated car owner.
+        Optionally filter by booking status and/or vehicle ID.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: listOwnerBookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^(PENDING|CONFIRMED|IN_PROGRESS|COMPLETED|CANCELLED|REJECTED)$"
+            enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, REJECTED]
+          description: "Filter by booking status (optional)"
+        - name: vehicleId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: "Filter by vehicle ID (optional)"
+      responses:
+        '200':
+          description: List of bookings for owner's vehicles (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+              example:
+                - bookingId: 1
+                  driverId: 2
+                  driverFullName: "John Doe"
+                  vehicleId: 5
+                  vehicleSummary: "2022 Toyota Corolla"
+                  status: "PENDING"
+                  startTime: "2026-03-20T08:00:00"
+                  endTime: "2026-03-20T16:00:00"
+                  totalHours: 8
+                  totalPrice: 124.00
+                  createdAt: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+
+  # ── Owner: Get Booking Detail ───────────────────────────────────
+
+  /api/owner/bookings/{bookingId}:
+    get:
+      tags: [OwnerBooking]
+      summary: Get booking details (owner view)
+      description: |
+        Returns full booking details for a booking associated with the authenticated owner's vehicle.
+        Includes driver info, photos, cancellation details, and timestamps.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: getOwnerBookingDetail
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      responses:
+        '200':
+          description: Full booking details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailResponse'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Booking's vehicle does not belong to the authenticated owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Owner: Confirm Booking ──────────────────────────────────────
+
+  /api/owner/bookings/{bookingId}/confirm:
+    put:
+      tags: [OwnerBooking]
+      summary: Confirm a pending booking
+      description: |
+        Confirms a PENDING booking. The vehicle must still be active.
+        On confirmation, the vehicle's location is copied to the booking's pickup location fields.
+        Other PENDING bookings by the same driver that overlap with the confirmed time range are
+        auto-rejected with reason "Auto-rejected: driver already has a confirmed booking for this time slot".
+        An email notification is sent to the driver.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: confirmBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      responses:
+        '200':
+          description: Booking confirmed, status changed to CONFIRMED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "CONFIRMED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Booking not in PENDING status or vehicle not active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notPending:
+                  summary: Booking not in PENDING status (BOOK-013)
+                  value:
+                    code: BOOK-013
+                    message: "Only pending bookings can be confirmed"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                vehicleNotActive:
+                  summary: Vehicle deactivated since booking was created (BOOK-003)
+                  value:
+                    code: BOOK-003
+                    message: "Vehicle is not currently available for rent"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Vehicle does not belong to the authenticated owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Owner: Reject Booking ───────────────────────────────────────
+
+  /api/owner/bookings/{bookingId}/reject:
+    put:
+      tags: [OwnerBooking]
+      summary: Reject a pending booking
+      description: |
+        Rejects a PENDING booking with a required reason.
+        An email notification is sent to the driver with the rejection reason.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: rejectBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectBookingRequest'
+            example:
+              reason: "Vehicle is unavailable for those dates"
+      responses:
+        '200':
+          description: Booking rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "REJECTED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Booking not in PENDING status or missing reason
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notPending:
+                  summary: Booking not in PENDING status (BOOK-014)
+                  value:
+                    code: BOOK-014
+                    message: "Only pending bookings can be rejected"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                missingReason:
+                  summary: Missing rejection reason (BOOK-023)
+                  value:
+                    code: BOOK-023
+                    message: "Rejection reason is required"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Vehicle does not belong to the authenticated owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Owner: Cancel Booking ───────────────────────────────────────
+
+  /api/owner/bookings/{bookingId}/cancel:
+    put:
+      tags: [OwnerBooking]
+      summary: Cancel a confirmed booking (owner)
+      description: |
+        Cancels a CONFIRMED booking. Owner can only cancel bookings in CONFIRMED status
+        (not PENDING or IN_PROGRESS). A cancellation reason is required.
+        Sets `cancelledBy = "OWNER"`. An email notification is sent to the driver.
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: cancelBookingByOwner
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+            example:
+              reason: "Emergency - vehicle needs repairs"
+      responses:
+        '200':
+          description: Booking cancelled by owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "CANCELLED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+        '400':
+          description: Booking not in CONFIRMED status or missing reason
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidStatus:
+                  summary: Booking not in cancellable status (BOOK-015)
+                  value:
+                    code: BOOK-015
+                    message: "Only pending or confirmed bookings can be cancelled"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+                missingReason:
+                  summary: Missing cancellation reason (BOOK-022)
+                  value:
+                    code: BOOK-022
+                    message: "Cancellation reason is required"
+                    status: 400
+                    timestamp: "2026-03-17T10:00:00.000"
+        '401':
+          description: Not authenticated
+        '403':
+          description: Vehicle does not belong to the authenticated owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-012
+                message: "You do not have permission to access this booking"
+                status: 403
+                timestamp: "2026-03-17T10:00:00.000"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+  # ── Admin: List All Bookings ────────────────────────────────────
+
+  /api/admin/bookings:
+    get:
+      tags: [AdminBooking]
+      summary: List all bookings (platform overview)
+      description: |
+        Returns all bookings across the platform for admin oversight.
+        Optionally filter by status, driver ID, and/or vehicle ID.
+        Requires JWT authentication with ADMIN role.
+      operationId: listAllBookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^(PENDING|CONFIRMED|IN_PROGRESS|COMPLETED|CANCELLED|REJECTED)$"
+            enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, REJECTED]
+          description: "Filter by booking status (optional)"
+        - name: driverId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: "Filter by driver user ID (optional)"
+        - name: vehicleId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: "Filter by vehicle ID (optional)"
+      responses:
+        '200':
+          description: List of all bookings matching filters (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminBookingResponse'
+              example:
+                - bookingId: 1
+                  driverId: 2
+                  driverFullName: "John Doe"
+                  vehicleId: 5
+                  vehicleSummary: "2022 Toyota Corolla"
+                  status: "CONFIRMED"
+                  startTime: "2026-03-20T08:00:00"
+                  endTime: "2026-03-20T16:00:00"
+                  totalHours: 8
+                  totalPrice: 124.00
+                  createdAt: "2026-03-17T10:00:00.000"
+                  ownerId: 3
+                  ownerFullName: "Jane Smith"
+                  vehicleLicensePlate: "ABC 1234"
+        '401':
+          description: Not authenticated
+
+  # ── Admin: Get Booking Detail ───────────────────────────────────
+
+  /api/admin/bookings/{bookingId}:
+    get:
+      tags: [AdminBooking]
+      summary: Get full booking details (admin view with photos)
+      description: |
+        Returns the complete booking details including pickup/return photos, driver info,
+        owner info, vehicle info, and all timestamps. Used for dispute resolution.
+        Requires JWT authentication with ADMIN role.
+      operationId: getAdminBookingDetail
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Booking ID
+      responses:
+        '200':
+          description: Full booking details with all information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBookingDetailResponse'
+              example:
+                bookingId: 1
+                driverId: 2
+                driverFullName: "John Doe"
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                status: "COMPLETED"
+                startTime: "2026-03-20T08:00:00"
+                endTime: "2026-03-20T16:00:00"
+                totalHours: 8
+                totalPrice: 124.00
+                createdAt: "2026-03-17T10:00:00.000"
+                ownerId: 3
+                ownerFullName: "Jane Smith"
+                vehicleLicensePlate: "ABC 1234"
+                vehicleMake: "Toyota"
+                vehicleModel: "Corolla"
+                vehicleYear: 2022
+                vehicleCategory: "SEDAN"
+                vehicleServiceType: "TAXI_AND_DELIVERY"
+                vehicleHourlyRate: 15.50
+                pickupLocation: "Downtown Vancouver"
+                pickupLatitude: 49.2827
+                pickupLongitude: -123.1207
+                pickupPhotoUrls: ["/files/bookings/1/pickup/photo1.jpg", "/files/bookings/1/pickup/photo2.jpg"]
+                returnPhotoUrls: ["/files/bookings/1/return/photo1.jpg"]
+                cancellationReason: null
+                cancelledBy: null
+                confirmedAt: "2026-03-17T12:00:00.000"
+                startedAt: "2026-03-20T07:50:00.000"
+                completedAt: "2026-03-20T16:05:00.000"
+                cancelledAt: null
+        '401':
+          description: Not authenticated
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: BOOK-011
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-03-17T10:00:00.000"
+
+components:
+  schemas:
+    # ── Request DTOs ──────────────────────────────────────────────
+
+    CreateBookingRequest:
+      type: object
+      required: [vehicleId, startTime, endTime]
+      properties:
+        vehicleId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: "ID of the vehicle to book. Must reference an existing APPROVED and active vehicle."
+          example: 5
+        startTime:
+          type: string
+          format: date-time
+          description: "Shift start datetime. Must be in the future. Must be within vehicle's `availableUntil` window."
+          example: "2026-03-20T08:00:00"
+        endTime:
+          type: string
+          format: date-time
+          description: "Shift end datetime. Must be >= startTime + 4 hours and <= startTime + 24 hours. Must not exceed vehicle's `availableUntil`."
+          example: "2026-03-20T16:00:00"
+
+    CancelBookingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: "^[a-zA-Z0-9\\u00C0-\\u00FF\\s.,!?()\\'\\+:\\-/]*$"
+          description: "Cancellation reason. Letters, numbers, spaces, and basic punctuation only. Max 500 characters."
+          example: "Schedule conflict, cannot make it"
+
+    RejectBookingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: "^[a-zA-Z0-9\\u00C0-\\u00FF\\s.,!?()\\'\\+:\\-/]*$"
+          description: "Rejection reason. Letters, numbers, spaces, and basic punctuation only. Max 500 characters."
+          example: "Vehicle is unavailable for those dates"
+
+    # ── Response DTOs ─────────────────────────────────────────────
+
+    BookingResponse:
+      type: object
+      description: "Summary booking information returned for list views and action confirmations."
+      properties:
+        bookingId:
+          type: integer
+          format: int64
+          example: 1
+        driverId:
+          type: integer
+          format: int64
+          description: "Driver user ID"
+          example: 2
+        driverFullName:
+          type: string
+          description: "Driver's firstName + lastName"
+          example: "John Doe"
+        vehicleId:
+          type: integer
+          format: int64
+          description: "Vehicle ID"
+          example: 5
+        vehicleSummary:
+          type: string
+          description: "Formatted as 'year make model' (e.g. '2022 Toyota Corolla')"
+          example: "2022 Toyota Corolla"
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, REJECTED]
+          description: "Current booking status"
+          example: "PENDING"
+        startTime:
+          type: string
+          format: date-time
+          description: "Shift start datetime (ISO-8601)"
+          example: "2026-03-20T08:00:00"
+        endTime:
+          type: string
+          format: date-time
+          description: "Shift end datetime (ISO-8601)"
+          example: "2026-03-20T16:00:00"
+        totalHours:
+          type: integer
+          minimum: 4
+          maximum: 24
+          description: "Total booked hours"
+          example: 8
+        totalPrice:
+          type: number
+          format: double
+          description: "Computed total cost (totalHours * hourlyRate at booking creation)"
+          example: 124.00
+        createdAt:
+          type: string
+          format: date-time
+          description: "Booking creation timestamp (ISO-8601)"
+          example: "2026-03-17T10:00:00.000"
+        updatedAt:
+          type: string
+          format: date-time
+          description: "Last modification timestamp (ISO-8601)"
+          example: "2026-03-17T10:00:00.000"
+
+    BookingDetailResponse:
+      type: object
+      description: "Full booking details including vehicle info, owner info, photos, and timestamps. Extends BookingResponse."
+      allOf:
+        - $ref: '#/components/schemas/BookingResponse'
+        - type: object
+          properties:
+            ownerId:
+              type: integer
+              format: int64
+              description: "Vehicle owner user ID"
+              example: 3
+            ownerFullName:
+              type: string
+              description: "Owner's firstName + lastName"
+              example: "Jane Smith"
+            vehicleMake:
+              type: string
+              description: "Vehicle make"
+              example: "Toyota"
+            vehicleModel:
+              type: string
+              description: "Vehicle model"
+              example: "Corolla"
+            vehicleYear:
+              type: integer
+              description: "Vehicle year"
+              example: 2022
+            vehicleLicensePlate:
+              type: string
+              description: "Vehicle license plate"
+              example: "ABC 1234"
+            vehicleCategory:
+              type: string
+              enum: [SEDAN, SUV, VAN, TRUCK, COMPACT]
+              description: "Vehicle category"
+              example: "SEDAN"
+            vehicleServiceType:
+              type: string
+              enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+              description: "Vehicle's service type classification"
+              example: "TAXI_AND_DELIVERY"
+            vehicleHourlyRate:
+              type: number
+              format: double
+              description: "Vehicle's hourly rate at the time of booking"
+              example: 15.50
+            pickupLocation:
+              type: string
+              nullable: true
+              maxLength: 200
+              description: "Human-readable pickup location. Set when booking is confirmed."
+              example: "Downtown Vancouver"
+            pickupPhotoUrls:
+              type: array
+              items:
+                type: string
+              nullable: true
+              description: "URLs to pickup condition photos. Empty list until shift starts."
+              example: ["/files/bookings/1/pickup/photo1.jpg", "/files/bookings/1/pickup/photo2.jpg"]
+            returnPhotoUrls:
+              type: array
+              items:
+                type: string
+              nullable: true
+              description: "URLs to return condition photos. Empty list until shift completes."
+              example: []
+            cancellationReason:
+              type: string
+              nullable: true
+              maxLength: 500
+              description: "Reason for cancellation or rejection. Null if not cancelled/rejected."
+              example: null
+            cancelledBy:
+              type: string
+              nullable: true
+              enum: [DRIVER, OWNER, SYSTEM]
+              description: "Who initiated the cancellation. Null if not cancelled."
+              example: null
+            confirmedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp when owner confirmed (ISO-8601). Null if not confirmed."
+              example: "2026-03-17T12:00:00.000"
+            startedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp when driver started shift (ISO-8601). Null if not started."
+              example: null
+            completedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp when shift completed (ISO-8601). Null if not completed."
+              example: null
+            cancelledAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp when booking was cancelled (ISO-8601). Null if not cancelled."
+              example: null
+            effectiveServiceType:
+              type: string
+              enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+              description: "Effective service type based on driver's license class + vehicle classification. See service type matching rules."
+              example: "TAXI_AND_DELIVERY"
+            serviceTypeWarning:
+              type: string
+              nullable: true
+              description: "Informational warning about service type restrictions. Null when no mismatch. NOT a hard block."
+              example: null
+
+    # NOTE: Pickup location coordinates (pickupLatitude, pickupLongitude) are NOT included in
+    # BookingDetailResponse. Use the dedicated GET /vehicle-location endpoint which handles
+    # the time-based masking logic (masked > 2h before start, exact <= 2h before start).
+
+    VehicleSearchResponse:
+      type: object
+      description: "Vehicle information in search results. Coordinates are masked (~1km radius)."
+      properties:
+        vehicleId:
+          type: integer
+          format: int64
+          example: 5
+        make:
+          type: string
+          description: "Vehicle manufacturer"
+          example: "Toyota"
+        model:
+          type: string
+          description: "Vehicle model"
+          example: "Corolla"
+        year:
+          type: integer
+          description: "Vehicle year"
+          example: 2022
+        category:
+          type: string
+          enum: [SEDAN, SUV, VAN, TRUCK, COMPACT]
+          description: "Vehicle category"
+          example: "SEDAN"
+        fuelType:
+          type: string
+          enum: [GASOLINE, DIESEL, ELECTRIC, HYBRID]
+          description: "Fuel type"
+          example: "GASOLINE"
+        serviceType:
+          type: string
+          enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+          description: "Vehicle's assigned service type classification"
+          example: "TAXI_AND_DELIVERY"
+        hourlyRate:
+          type: number
+          format: double
+          minimum: 1.00
+          description: "Hourly rental rate in dollars"
+          example: 15.50
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: "Vehicle description"
+          example: "Well-maintained sedan, ideal for ride-sharing"
+        generalLocation:
+          type: string
+          maxLength: 100
+          description: "Masked general location name"
+          example: "Downtown Vancouver"
+        maskedLatitude:
+          type: number
+          format: double
+          description: "Latitude rounded to ~1km radius: Math.round(lat * 100) / 100.0"
+          example: 49.28
+        maskedLongitude:
+          type: number
+          format: double
+          description: "Longitude rounded to ~1km radius: Math.round(lng * 100) / 100.0"
+          example: -123.12
+        availableUntil:
+          type: string
+          format: date-time
+          description: "Datetime until which the vehicle is available (ISO-8601)"
+          example: "2026-03-25T18:00:00"
+        ownerFullName:
+          type: string
+          description: "Vehicle owner's display name"
+          example: "Jane Smith"
+        ownerRating:
+          type: number
+          format: float
+          nullable: true
+          description: "Owner's average rating (0.0 - 5.0)"
+          example: 4.5
+        effectiveServiceType:
+          type: string
+          enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+          description: "Effective service type based on the driver's license class combined with the vehicle's classification. A CLASS_5 driver booking a TAXI_AND_DELIVERY vehicle will see DELIVERY_ONLY here."
+          example: "TAXI_AND_DELIVERY"
+        serviceTypeWarning:
+          type: string
+          nullable: true
+          description: "Informational warning if the driver's license restricts usage. Null when there is no restriction or mismatch. This is NOT a hard block — booking is still allowed."
+          example: null
+
+    VehicleBookingDetailResponse:
+      type: object
+      description: "Full vehicle details for booking consideration. Extends VehicleSearchResponse with licensePlate, ownerId, and vin."
+      allOf:
+        - $ref: '#/components/schemas/VehicleSearchResponse'
+        - type: object
+          properties:
+            licensePlate:
+              type: string
+              description: "Vehicle license plate"
+              example: "ABC 1234"
+            ownerId:
+              type: integer
+              format: int64
+              description: "Vehicle owner user ID"
+              example: 3
+            vin:
+              type: string
+              description: "Vehicle Identification Number"
+              example: "1HGBH41JXMN109186"
+
+    VehicleLocationResponse:
+      type: object
+      description: "Vehicle pickup location. Masked by default, exact coordinates revealed 2 hours before a confirmed booking's start time."
+      properties:
+        vehicleId:
+          type: integer
+          format: int64
+          example: 5
+        isExactLocation:
+          type: boolean
+          description: "True when exact coordinates are revealed (within 2h of confirmed booking start, or COMPLETED status)"
+          example: false
+        generalLocation:
+          type: string
+          maxLength: 100
+          description: "Human-readable area name"
+          example: "Downtown Vancouver"
+        latitude:
+          type: number
+          format: double
+          description: "Masked or exact latitude depending on timing and booking status"
+          example: 49.28
+        longitude:
+          type: number
+          format: double
+          description: "Masked or exact longitude depending on timing and booking status"
+          example: -123.12
+        message:
+          type: string
+          description: "Human-readable message about location availability"
+          example: "Exact location will be available 2 hours before your booking"
+
+    AdminBookingResponse:
+      type: object
+      description: "Booking information for admin list view. Extends BookingResponse with owner info and vehicle plate."
+      allOf:
+        - $ref: '#/components/schemas/BookingResponse'
+        - type: object
+          properties:
+            ownerId:
+              type: integer
+              format: int64
+              description: "Vehicle owner user ID"
+              example: 3
+            ownerFullName:
+              type: string
+              description: "Owner's firstName + lastName"
+              example: "Jane Smith"
+            vehicleLicensePlate:
+              type: string
+              description: "Vehicle license plate"
+              example: "ABC 1234"
+
+    AdminBookingDetailResponse:
+      type: object
+      description: "Complete booking details for admin view. Extends AdminBookingResponse with all details including photos and exact coordinates."
+      allOf:
+        - $ref: '#/components/schemas/AdminBookingResponse'
+        - type: object
+          properties:
+            vehicleMake:
+              type: string
+              description: "Vehicle make"
+              example: "Toyota"
+            vehicleModel:
+              type: string
+              description: "Vehicle model"
+              example: "Corolla"
+            vehicleYear:
+              type: integer
+              description: "Vehicle year"
+              example: 2022
+            vehicleCategory:
+              type: string
+              enum: [SEDAN, SUV, VAN, TRUCK, COMPACT]
+              description: "Vehicle category"
+              example: "SEDAN"
+            vehicleServiceType:
+              type: string
+              enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+              description: "Vehicle's service type classification"
+              example: "TAXI_AND_DELIVERY"
+            vehicleHourlyRate:
+              type: number
+              format: double
+              description: "Vehicle's hourly rate"
+              example: 15.50
+            pickupLocation:
+              type: string
+              nullable: true
+              maxLength: 200
+              description: "Human-readable pickup location"
+              example: "Downtown Vancouver"
+            pickupLatitude:
+              type: number
+              format: double
+              nullable: true
+              description: "Exact pickup latitude (always exact for admin)"
+              example: 49.2827
+            pickupLongitude:
+              type: number
+              format: double
+              nullable: true
+              description: "Exact pickup longitude (always exact for admin)"
+              example: -123.1207
+            pickupPhotoUrls:
+              type: array
+              items:
+                type: string
+              nullable: true
+              description: "File paths to pickup condition photos"
+              example: ["/files/bookings/1/pickup/photo1.jpg", "/files/bookings/1/pickup/photo2.jpg"]
+            returnPhotoUrls:
+              type: array
+              items:
+                type: string
+              nullable: true
+              description: "File paths to return condition photos"
+              example: ["/files/bookings/1/return/photo1.jpg"]
+            cancellationReason:
+              type: string
+              nullable: true
+              maxLength: 500
+              description: "Reason for cancellation or rejection"
+              example: null
+            cancelledBy:
+              type: string
+              nullable: true
+              enum: [DRIVER, OWNER, SYSTEM]
+              description: "Who initiated the cancellation"
+              example: null
+            confirmedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp of owner confirmation (ISO-8601)"
+              example: "2026-03-17T12:00:00.000"
+            startedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp of shift start (ISO-8601)"
+              example: "2026-03-20T07:50:00.000"
+            completedAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp of shift completion (ISO-8601)"
+              example: "2026-03-20T16:05:00.000"
+            cancelledAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: "Timestamp of cancellation (ISO-8601)"
+              example: null
+            effectiveServiceType:
+              type: string
+              enum: [TAXI_AND_DELIVERY, DELIVERY_ONLY]
+              description: "Effective service type based on driver's license class + vehicle classification"
+              example: "TAXI_AND_DELIVERY"
+            serviceTypeWarning:
+              type: string
+              nullable: true
+              description: "Informational warning about service type restrictions. Null when no mismatch."
+              example: null
+
+    # ── Error Schemas ─────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      description: "Standard business error response. Used for all BOOK-XXX, VEH-XXX, DOC-XXX, and AUTH-XXX errors."
+      properties:
+        code:
+          type: string
+          description: "Error code (e.g. BOOK-001, VEH-004)"
+          example: "BOOK-011"
+        message:
+          type: string
+          description: "Human-readable error message"
+          example: "Booking not found"
+        status:
+          type: integer
+          description: "HTTP status code"
+          example: 404
+        timestamp:
+          type: string
+          format: date-time
+          description: "Error timestamp (ISO-8601)"
+          example: "2026-03-17T10:00:00.000"
+
+    ValidationErrorResponse:
+      type: object
+      description: "Validation error response. Returned when request fields fail bean validation."
+      properties:
+        code:
+          type: string
+          description: "Always VALIDATION-001"
+          example: "VALIDATION-001"
+        error:
+          type: string
+          description: "Always 'Validation Failed'"
+          example: "Validation Failed"
+        status:
+          type: integer
+          description: "Always 400"
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-17T10:00:00.000"
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Map of field names to validation error messages"
+          example:
+            vehicleId: "Vehicle ID is required"
+            startTime: "Start time is required"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained via POST /api/auth/login or POST /api/auth/verify-otp (Module 1).
+        Token payload includes: userId, email, role (DRIVER, CAR_OWNER, or ADMIN).
+        Must be sent in the Authorization header: `Bearer <token>`.
