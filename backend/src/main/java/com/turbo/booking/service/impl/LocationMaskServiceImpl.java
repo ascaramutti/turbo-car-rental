@@ -3,20 +3,21 @@ package com.turbo.booking.service.impl;
 import com.turbo.booking.model.Booking;
 import com.turbo.booking.model.enums.BookingStatus;
 import com.turbo.booking.service.LocationMaskService;
+import com.turbo.booking.service.mapper.BookingServiceMapper;
 import com.turbo.booking.service.result.LocationResult;
 import com.turbo.booking.validation.BookingValidationConstraints;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
 @Service
+@RequiredArgsConstructor
 public class LocationMaskServiceImpl implements LocationMaskService {
 
+    private final BookingServiceMapper serviceMapper;
+
     private static final double EARTH_RADIUS_KM = 6371.0;
-    private static final String MESSAGE_LOCATION_NOT_YET_AVAILABLE =
-            "Exact location will be available 2 hours before your booking";
-    private static final String MESSAGE_LOCATION_NOW_AVAILABLE =
-            "Exact pickup location is now available";
 
     @Override
     public double maskCoordinate(double coordinate) {
@@ -49,16 +50,16 @@ public class LocationMaskServiceImpl implements LocationMaskService {
         if (exactLocation) {
             latitude = booking.getPickupLatitude();
             longitude = booking.getPickupLongitude();
-            message = MESSAGE_LOCATION_NOW_AVAILABLE;
+            message = BookingValidationConstraints.LOCATION_MESSAGE_NOW_AVAILABLE;
         } else {
             latitude = booking.getPickupLatitude() != null
                     ? maskCoordinate(booking.getPickupLatitude()) : null;
             longitude = booking.getPickupLongitude() != null
                     ? maskCoordinate(booking.getPickupLongitude()) : null;
-            message = MESSAGE_LOCATION_NOT_YET_AVAILABLE;
+            message = BookingValidationConstraints.LOCATION_MESSAGE_NOT_YET_AVAILABLE;
         }
 
-        return new LocationResult(
+        return serviceMapper.toLocationResult(
                 booking.getVehicle().getVehicleId(),
                 exactLocation,
                 booking.getPickupLocation(),

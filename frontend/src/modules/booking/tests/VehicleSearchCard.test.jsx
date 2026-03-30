@@ -27,7 +27,8 @@ describe('VehicleSearchCard', () => {
 
   it('renders the hourly rate', () => {
     renderWithProviders(<VehicleSearchCard vehicle={BASE_VEHICLE} onClick={vi.fn()} />);
-    expect(screen.getByText('$25.00/hr')).toBeInTheDocument();
+    expect(screen.getByText('$25.00')).toBeInTheDocument();
+    expect(screen.getByText('/ hr')).toBeInTheDocument();
   });
 
   it('renders the masked general location', () => {
@@ -65,23 +66,24 @@ describe('VehicleSearchCard', () => {
     expect(screen.queryByText(/license does not cover/i)).not.toBeInTheDocument();
   });
 
-  it('calls onClick when the card is clicked', async () => {
+  it('calls onClick when the View button is clicked', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
     renderWithProviders(<VehicleSearchCard vehicle={BASE_VEHICLE} onClick={handleClick} />);
 
-    await user.click(screen.getByText('2022 Toyota Camry'));
+    await user.click(screen.getByRole('button', { name: 'View' }));
 
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the vehicle category', () => {
+  it('renders the vehicle service type as a readable label', () => {
     renderWithProviders(<VehicleSearchCard vehicle={BASE_VEHICLE} onClick={vi.fn()} />);
-    expect(screen.getByText('SEDAN')).toBeInTheDocument();
+    expect(screen.getByText('Taxi + Delivery')).toBeInTheDocument();
   });
 
-  it('renders effective service type when provided', () => {
-    renderWithProviders(<VehicleSearchCard vehicle={BASE_VEHICLE} onClick={vi.fn()} />);
-    expect(screen.getByText('TAXI_AND_DELIVERY')).toBeInTheDocument();
+  it('renders effective service type label when provided', () => {
+    const vehicle = { ...BASE_VEHICLE, effectiveServiceType: 'DELIVERY_ONLY' };
+    renderWithProviders(<VehicleSearchCard vehicle={vehicle} onClick={vi.fn()} />);
+    expect(screen.getByText('Delivery Only')).toBeInTheDocument();
   });
 });

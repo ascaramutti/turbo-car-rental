@@ -7,7 +7,10 @@ import com.turbo.booking.repository.BookingPhotoRepository;
 import com.turbo.booking.repository.BookingRepository;
 import com.turbo.booking.service.BookingService;
 import com.turbo.booking.service.LocationMaskService;
+import com.turbo.booking.service.mapper.BookingServiceMapper;
+import com.turbo.booking.service.result.DriverHoursSummary;
 import com.turbo.booking.service.result.LocationResult;
+import com.turbo.booking.service.result.OwnerDashboardStats;
 import com.turbo.booking.service.result.VehicleSearchResult;
 import com.turbo.booking.service.command.CancelBookingCommand;
 import com.turbo.booking.service.command.CompleteBookingCommand;
@@ -23,8 +26,10 @@ import com.turbo.exception.BusinessException;
 import com.turbo.exception.error.BookingErrorCode;
 import com.turbo.exception.error.DocumentErrorCode;
 import com.turbo.exception.error.VehicleErrorCode;
+import com.turbo.user.model.CarOwner;
 import com.turbo.user.model.Driver;
 import com.turbo.user.model.enums.UserRole;
+import com.turbo.user.repository.CarOwnerRepository;
 import com.turbo.user.repository.DriverRepository;
 import com.turbo.vehicle.model.Vehicle;
 import com.turbo.vehicle.model.enums.FuelType;
@@ -40,7 +45,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,8 +64,41 @@ public class BookingServiceImpl implements BookingService {
     private final BookingPhotoRepository bookingPhotoRepository;
     private final VehicleRepository vehicleRepository;
     private final DriverRepository driverRepository;
+    private final CarOwnerRepository carOwnerRepository;
     private final FileStorageService fileStorageService;
     private final LocationMaskService locationMaskService;
+    private final BookingServiceMapper serviceMapper;
+
+    // ── Driver: dashboard ────────────────────────────────────────────
+
+    @Override
+    public DriverHoursSummary getDriverHoursSummary(Long driverId) {
+        LocalDateTime weekStart = LocalDate.now().with(DayOfWeek.MONDAY).atStartOfDay();
+        LocalDateTime weekEnd = weekStart.plusWeeks(1);
+        List<BookingStatus> countedStatuses =
+                List.of(BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED);
+        int hoursUsed = bookingRepository.sumHoursForDriverInWeek(driverId, countedStatuses, weekStart, weekEnd);
+        int max = BookingValidationConstraints.MAX_SHIFT_HOURS;
+        return serviceMapper.toDriverHoursSummary(hoursUsed, max, Math.max(0, max - hoursUsed));
+    }
+
+    // ── Owner: dashboard ─────────────────────────────────────────────
+
+    @Override
+    public OwnerDashboardStats getOwnerDashboardStats(Long ownerId) {
+        long activeVehicles = vehicleRepository.countByOwnerUserIdAndIsActiveTrue(ownerId);
+        BigDecimal totalEarnings = bookingRepository.sumEarningsForOwner(ownerId, BookingStatus.COMPLETED);
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1);
+        BigDecimal monthEarnings = bookingRepository.sumEarningsForOwnerInMonth(
+                ownerId, BookingStatus.COMPLETED, monthStart, monthEnd);
+        long completedCount = bookingRepository.countByVehicleOwnerAndStatus(ownerId, BookingStatus.COMPLETED);
+        Float rating = carOwnerRepository.findById(ownerId)
+                .map(CarOwner::getRating)
+                .orElse(null);
+        return serviceMapper.toOwnerDashboardStats(
+                (int) activeVehicles, totalEarnings, monthEarnings, (int) completedCount, rating);
+    }
 
     // ── Driver: search ───────────────────────────────────────────────
 
@@ -76,6 +116,7 @@ public class BookingServiceImpl implements BookingService {
 
         return candidates.stream()
                 .filter(v -> !hasVehicleConflict(v.getVehicleId(), command.getStartTime(), command.getEndTime()))
+                .filter(v -> isAvailableUntilEndTime(v, command.getEndTime()))
                 .filter(v -> isWithinSearchRadius(v, command))
                 .map(v -> buildVehicleSearchResponse(v, driver))
                 .toList();
@@ -108,7 +149,9 @@ public class BookingServiceImpl implements BookingService {
         validateDriverNotOwner(vehicle, command.getDriverId());
         validateNoDriverConflict(command.getDriverId(), command.getStartTime(), command.getEndTime());
 
-        Booking booking = buildNewBooking(driver, vehicle, command);
+        long hours = Duration.between(command.getStartTime(), command.getEndTime()).toHours();
+        BigDecimal totalPrice = vehicle.getHourlyRate().multiply(BigDecimal.valueOf(hours));
+        Booking booking = serviceMapper.toBooking(command, driver, vehicle, (int) hours, totalPrice);
         return bookingRepository.save(booking);
     }
 
@@ -268,6 +311,14 @@ public class BookingServiceImpl implements BookingService {
         return findBookingById(bookingId);
     }
 
+    // ── Photo operations ─────────────────────────────────────────────
+
+    @Override
+    public BookingPhoto getBookingPhoto(Long photoId) {
+        return bookingPhotoRepository.findById(photoId)
+                .orElseThrow(() -> new BusinessException(BookingErrorCode.BOOKING_NOT_FOUND));
+    }
+
     // ── Scheduled tasks ──────────────────────────────────────────────
 
     /** Auto-cancels PENDING bookings whose startTime has passed (runs every 5 minutes). */
@@ -313,28 +364,10 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new BusinessException(VehicleErrorCode.VEHICLE_NOT_FOUND));
     }
 
-    /** Finds a driver by ID or throws BOOK-001 if user is not a Driver. */
+    /** Finds a driver by ID or throws BOOK-024 if the driver does not exist. */
     private Driver findDriverById(Long driverId) {
         return driverRepository.findById(driverId)
-                .orElseThrow(() -> new BusinessException(BookingErrorCode.BOOKING_NOT_FOUND));
-    }
-
-    // ── Booking creation helpers ─────────────────────────────────────
-
-    /** Builds a new Booking entity from the command, driver, and vehicle. */
-    private Booking buildNewBooking(Driver driver, Vehicle vehicle, CreateBookingCommand command) {
-        long hours = Duration.between(command.getStartTime(), command.getEndTime()).toHours();
-        BigDecimal totalPrice = vehicle.getHourlyRate().multiply(BigDecimal.valueOf(hours));
-
-        Booking booking = new Booking();
-        booking.setDriver(driver);
-        booking.setVehicle(vehicle);
-        booking.setStatus(BookingStatus.PENDING);
-        booking.setStartTime(command.getStartTime());
-        booking.setEndTime(command.getEndTime());
-        booking.setTotalHours((int) hours);
-        booking.setTotalPrice(totalPrice);
-        return booking;
+                .orElseThrow(() -> new BusinessException(BookingErrorCode.DRIVER_NOT_FOUND));
     }
 
     // ── Confirmation helpers ─────────────────────────────────────────
@@ -402,16 +435,16 @@ public class BookingServiceImpl implements BookingService {
     private BookingPhoto storeBookingPhoto(MultipartFile photo, Booking booking,
                                            String subTypeDir, String photoTypeLabel) {
         Long bookingId = booking.getBookingId();
+        Long driverId = booking.getDriver().getUserId();
         String subDirectory = BookingValidationConstraints.BOOKING_PHOTO_DIR + "/" + bookingId + "/" + subTypeDir;
-        String storedUrl = fileStorageService.store(photo, bookingId, subDirectory);
+        String storedUrl = fileStorageService.store(photo, driverId, subDirectory);
 
-        BookingPhoto entity = new BookingPhoto();
-        entity.setBooking(booking);
-        entity.setPhotoType(photoTypeLabel);
-        entity.setFileUrl(storedUrl);
-        entity.setFileName(photo.getOriginalFilename() != null ? photo.getOriginalFilename() : "photo");
-        entity.setFileSize(photo.getSize());
-        return entity;
+        String rawName = photo.getOriginalFilename() != null ? photo.getOriginalFilename() : "photo";
+        String fileName = rawName.replaceAll(BookingValidationConstraints.UNSAFE_FILENAME_CHARS, "");
+        if (fileName.length() > BookingValidationConstraints.MAX_FILENAME_LENGTH) {
+            fileName = fileName.substring(0, BookingValidationConstraints.MAX_FILENAME_LENGTH);
+        }
+        return serviceMapper.toBookingPhoto(booking, photoTypeLabel, storedUrl, fileName, photo.getSize());
     }
 
     // ── Search response helpers ──────────────────────────────────────
@@ -423,7 +456,7 @@ public class BookingServiceImpl implements BookingService {
         double maskedLng = vehicle.getLongitude() != null
                 ? locationMaskService.maskCoordinate(vehicle.getLongitude()) : 0.0;
         String[] serviceTypeFields = computeServiceTypeFields(vehicle, driver);
-        return new VehicleSearchResult(vehicle, maskedLat, maskedLng, serviceTypeFields[0], serviceTypeFields[1]);
+        return serviceMapper.toVehicleSearchResult(vehicle, maskedLat, maskedLng, serviceTypeFields[0], serviceTypeFields[1]);
     }
 
     /** Builds a VehicleSearchResult for the detail view (same shape; mapper adds extra detail fields). */
@@ -444,7 +477,7 @@ public class BookingServiceImpl implements BookingService {
             return new String[]{vehicleServiceType != null ? vehicleServiceType.name() : null, null};
         }
 
-        boolean isClass5 = "CLASS_5".equalsIgnoreCase(driverLicenseClass);
+        boolean isClass5 = BookingValidationConstraints.LICENSE_CLASS_5.equalsIgnoreCase(driverLicenseClass);
         boolean isTaxiAndDelivery = vehicleServiceType == ServiceType.TAXI_AND_DELIVERY;
 
         if (isClass5 && isTaxiAndDelivery) {
@@ -463,6 +496,14 @@ public class BookingServiceImpl implements BookingService {
     }
 
     // ── Geo-filter helper ────────────────────────────────────────────
+
+    /** Returns true if the vehicle's availableUntil covers the requested endTime. */
+    private boolean isAvailableUntilEndTime(Vehicle vehicle, LocalDateTime endTime) {
+        if (endTime == null || vehicle.getAvailableUntil() == null) {
+            return true;
+        }
+        return !vehicle.getAvailableUntil().isBefore(endTime);
+    }
 
     /** Returns true if the vehicle passes the optional geo-radius filter from the command. */
     private boolean isWithinSearchRadius(Vehicle vehicle, SearchVehiclesCommand command) {

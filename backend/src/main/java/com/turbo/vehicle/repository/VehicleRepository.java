@@ -16,6 +16,9 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     List<Vehicle> findByOwnerUserId(Long ownerId);
 
+    /** Counts active vehicles owned by the given owner. */
+    Long countByOwnerUserIdAndIsActiveTrue(Long ownerId);
+
     boolean existsByVin(String vin);
 
     boolean existsByLicensePlate(String licensePlate);
@@ -40,4 +43,8 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
             @Param("minPrice") BigDecimal minPrice,
             @Param("maxPrice") BigDecimal maxPrice
     );
+
+    /** Finds active vehicles whose availableUntil has passed. */
+    @Query("SELECT v FROM Vehicle v WHERE v.isActive = true AND v.availableUntil IS NOT NULL AND v.availableUntil < :now")
+    List<Vehicle> findExpiredActiveVehicles(@Param("now") LocalDateTime now);
 }

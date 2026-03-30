@@ -8,13 +8,15 @@ import { MIN_SHIFT_HOURS, MAX_SHIFT_HOURS } from '../constants/bookingConstants'
  * Renders datetime pickers for startTime and endTime with onBlur validation.
  * @param {Object} props
  * @param {number} props.vehicleId - Pre-selected vehicle ID
+ * @param {string} [props.availableUntil] - ISO datetime string of vehicle availability deadline
  * @param {Function} props.onSubmit - Callback with { vehicleId, startTime, endTime }
  * @param {boolean} props.isLoading - Whether a submission is in progress
  */
-export default function BookingForm({ vehicleId, onSubmit, isLoading = false }) {
+export default function BookingForm({ vehicleId, availableUntil, onSubmit, isLoading = false }) {
   const now = new Date();
-  // Default min datetime for the input (current time, aligned to minute)
-  const minDateTime = new Date(now.getTime() + 60 * 1000).toISOString().slice(0, 16);
+  // Default min datetime for the input (current time + 1 min, in local timezone)
+  const local = new Date(now.getTime() + 60 * 1000);
+  const minDateTime = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}T${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
 
   const [formData, setFormData] = useState({ startTime: '', endTime: '' });
   const [errors, setErrors] = useState({});
@@ -48,6 +50,11 @@ export default function BookingForm({ vehicleId, onSubmit, isLoading = false }) 
       <p className="text-xs text-text-gray">
         Shifts must be between {MIN_SHIFT_HOURS} and {MAX_SHIFT_HOURS} hours.
       </p>
+      {availableUntil && (
+        <p className="text-xs text-amber-600 font-medium">
+          Vehicle available until: {new Date(availableUntil).toLocaleString()}
+        </p>
+      )}
 
       {/* Start Time */}
       <div>
@@ -82,6 +89,7 @@ export default function BookingForm({ vehicleId, onSubmit, isLoading = false }) 
           name="endTime"
           value={formData.endTime}
           min={formData.startTime || minDateTime}
+          max={availableUntil ? availableUntil.slice(0, 16) : undefined}
           onChange={handleChange}
           onBlur={() => handleBlur('endTime')}
           className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-accent-orange/30 ${

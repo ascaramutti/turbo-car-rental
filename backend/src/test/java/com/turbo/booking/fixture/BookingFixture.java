@@ -4,12 +4,16 @@ import com.turbo.booking.dto.AdminBookingDetailResponse;
 import com.turbo.booking.dto.AdminBookingResponse;
 import com.turbo.booking.dto.BookingDetailResponse;
 import com.turbo.booking.dto.BookingResponse;
+import com.turbo.booking.dto.DriverHoursSummaryResponse;
+import com.turbo.booking.dto.OwnerDashboardResponse;
 import com.turbo.booking.dto.VehicleLocationResponse;
 import com.turbo.booking.dto.VehicleSearchResponse;
 import com.turbo.booking.model.Booking;
 import com.turbo.booking.model.enums.BookingStatus;
 import com.turbo.booking.service.command.CancelBookingCommand;
+import com.turbo.booking.service.result.DriverHoursSummary;
 import com.turbo.booking.service.result.LocationResult;
+import com.turbo.booking.service.result.OwnerDashboardStats;
 import com.turbo.booking.service.result.VehicleSearchResult;
 import com.turbo.booking.service.command.CompleteBookingCommand;
 import com.turbo.booking.service.command.ConfirmBookingCommand;
@@ -486,6 +490,30 @@ public final class BookingFixture {
     /** Creates a photo with an invalid extension (triggers DOC-001). */
     public static MockMultipartFile invalidFormatPhoto(String paramName) {
         return new MockMultipartFile(paramName, "doc.docx", "application/msword", "doc-content".getBytes());
+    }
+
+    // ── Dashboard results ─────────────────────────────────────────────
+
+    /** Creates a DriverHoursSummary where 8 of 24 hours have been used this week. */
+    public static DriverHoursSummary driverHoursSummary() {
+        return new DriverHoursSummary(8, 24, 16);
+    }
+
+    /** Creates a DriverHoursSummaryResponse matching {@link #driverHoursSummary()}. */
+    public static DriverHoursSummaryResponse driverHoursSummaryResponse() {
+        return new DriverHoursSummaryResponse(8, 24, 16);
+    }
+
+    /** Creates an OwnerDashboardStats with representative values. */
+    public static OwnerDashboardStats ownerDashboardStats() {
+        return new OwnerDashboardStats(3, new java.math.BigDecimal("960.00"),
+                new java.math.BigDecimal("120.00"), 8, 4.8f);
+    }
+
+    /** Creates an OwnerDashboardResponse matching {@link #ownerDashboardStats()}. */
+    public static OwnerDashboardResponse ownerDashboardResponse() {
+        return new OwnerDashboardResponse(3, new java.math.BigDecimal("960.00"),
+                new java.math.BigDecimal("120.00"), 8, 4.8f);
     }
 
     // ── Internal helpers ──────────────────────────────────────────────

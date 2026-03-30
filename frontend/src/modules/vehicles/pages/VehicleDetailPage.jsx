@@ -165,6 +165,8 @@ export default function VehicleDetailPage() {
   if (!vehicle) return null;
 
   const statusConfig = STATUS_CONFIG[vehicle.status];
+  const isExpired = vehicle.isActive && vehicle.availableUntil && new Date(vehicle.availableUntil) < new Date();
+  const isEffectivelyActive = vehicle.isActive && !isExpired;
 
   return (
     <div className="flex-1 bg-bg-light px-4 py-8">
@@ -232,7 +234,7 @@ export default function VehicleDetailPage() {
           <div className="mt-6 pt-4 border-t border-gray-100">
             {vehicle.status === VEHICLE_STATUS.APPROVED && (
               <div className="flex items-center gap-3">
-                {vehicle.isActive ? (
+                {isEffectivelyActive ? (
                   <>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-green-600 bg-green-50 border border-green-200 rounded-full">
                       <Power size={14} />
@@ -260,10 +262,17 @@ export default function VehicleDetailPage() {
                   </>
                 ) : (
                   <div className="w-full space-y-3">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-gray-500 bg-gray-50 border border-gray-200 rounded-full">
-                      <PowerOff size={14} />
-                      Not Listed
-                    </span>
+                    {isExpired ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full">
+                        <PowerOff size={14} />
+                        Listing Expired
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-gray-500 bg-gray-50 border border-gray-200 rounded-full">
+                        <PowerOff size={14} />
+                        Not Listed
+                      </span>
+                    )}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-text-dark mb-1">Available Until</label>
@@ -271,7 +280,7 @@ export default function VehicleDetailPage() {
                           type="datetime-local"
                           value={availableUntil}
                           onChange={(e) => setAvailableUntil(e.target.value)}
-                          min={new Date().toISOString().slice(0, 16)}
+                          min={(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}T${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`; })()}
                           className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm"
                         />
                       </div>

@@ -17,4 +17,5 @@ public final class BookingValidationMessages {
     public static final String REASON_SIZE = "Reason cannot exceed 500 characters";
     public static final String REASON_PATTERN_MSG =
             "Reason can only contain letters, numbers, spaces, and basic punctuation";
+    public static final String VEHICLE_ID_INVALID = "Vehicle ID must be a positive number";
 }

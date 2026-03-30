@@ -14,7 +14,9 @@ import { validateBookingField } from '../utils/bookingValidation';
 import BookingStatusBadge from '../components/BookingStatusBadge';
 import PhotoUpload from '../components/PhotoUpload';
 import LocationDisplay from '../components/LocationDisplay';
+import AuthImage from '../components/AuthImage';
 import { BOOKING_STATUS, MAX_REASON_LENGTH } from '../constants/bookingConstants';
+import { SERVICE_TYPE_LABELS, CATEGORY_LABELS } from '../../vehicles/constants/vehicleConstants';
 import { formatDateTime } from '../../../shared/utils/dateUtils';
 
 /** Success messages for each action. */
@@ -194,19 +196,16 @@ export default function DriverBookingDetailPage() {
               <InfoItem label="License Plate" value={booking.vehicleLicensePlate} />
             )}
             {booking.vehicleCategory && (
-              <InfoItem label="Category" value={booking.vehicleCategory} />
+              <InfoItem label="Category" value={CATEGORY_LABELS[booking.vehicleCategory] || booking.vehicleCategory} />
+            )}
+            {booking.vehicleServiceType && (
+              <InfoItem label="Service Type" value={SERVICE_TYPE_LABELS[booking.vehicleServiceType] || booking.vehicleServiceType} />
             )}
             {booking.vehicleHourlyRate && (
               <InfoItem label="Hourly Rate" value={`$${Number(booking.vehicleHourlyRate).toFixed(2)}/hr`} />
             )}
             {booking.ownerFullName && (
               <InfoItem label="Owner" value={booking.ownerFullName} />
-            )}
-            {booking.pickupLocation && (
-              <InfoItem label="Pickup Area" value={booking.pickupLocation} />
-            )}
-            {booking.confirmedAt && (
-              <InfoItem label="Confirmed At" value={formatDateTime(booking.confirmedAt)} />
             )}
             {booking.startedAt && (
               <InfoItem label="Started At" value={formatDateTime(booking.startedAt)} />
@@ -227,7 +226,7 @@ export default function DriverBookingDetailPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {booking.pickupPhotoUrls.map((url, index) => (
-                  <img
+                  <AuthImage
                     key={url}
                     src={url}
                     alt={`Pickup photo ${index + 1}`}
@@ -246,7 +245,7 @@ export default function DriverBookingDetailPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {booking.returnPhotoUrls.map((url, index) => (
-                  <img
+                  <AuthImage
                     key={url}
                     src={url}
                     alt={`Return photo ${index + 1}`}
@@ -287,74 +286,10 @@ export default function DriverBookingDetailPage() {
           <section className="bg-white border-2 border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="text-base font-bold text-text-dark">Actions</h2>
 
-            {/* Cancel (PENDING or CONFIRMED) */}
-            {(booking.status === BOOKING_STATUS.PENDING ||
-              booking.status === BOOKING_STATUS.CONFIRMED) && (
-              <>
-                {!showCancelForm ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowCancelForm(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 border-2 border-red-300 text-red-500 text-sm font-semibold rounded-full hover:bg-red-50 transition-colors"
-                  >
-                    Cancel Booking
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-text-dark">
-                      Cancellation Reason
-                    </label>
-                    <textarea
-                      value={cancelReason}
-                      onChange={(e) => {
-                        setCancelReason(e.target.value);
-                        if (cancelReasonError) setCancelReasonError(null);
-                      }}
-                      onBlur={() => {
-                        const err = validateBookingField('reason', cancelReason);
-                        setCancelReasonError(err);
-                      }}
-                      maxLength={MAX_REASON_LENGTH}
-                      rows={3}
-                      placeholder="Provide a reason for cancellation..."
-                      className={`w-full px-3 py-2 border-2 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-300 ${
-                        cancelReasonError ? 'border-red-400' : 'border-gray-200'
-                      }`}
-                    />
-                    {cancelReasonError && (
-                      <p className="text-xs text-red-500">{cancelReasonError}</p>
-                    )}
-                    <p className="text-xs text-text-gray text-right">
-                      {cancelReason.length}/{MAX_REASON_LENGTH}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCancel}
-                        disabled={isSubmitting}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white text-sm font-bold rounded-full hover:bg-red-600 transition-colors disabled:opacity-50"
-                      >
-                        {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-                        Confirm Cancellation
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowCancelForm(false); setCancelReason(''); setCancelReasonError(null); }}
-                        className="flex items-center gap-2 px-4 py-2 border-2 border-gray-200 text-text-gray text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
-                      >
-                        <X size={14} />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Start Shift (CONFIRMED) */}
-            {booking.status === BOOKING_STATUS.CONFIRMED && (
-              <>
-                {!showStartForm ? (
+            {/* Action buttons row */}
+            {!showStartForm && !showCompleteForm && !showCancelForm && (
+              <div className="flex items-center gap-3">
+                {booking.status === BOOKING_STATUS.CONFIRMED && (
                   <button
                     type="button"
                     onClick={() => setShowStartForm(true)}
@@ -362,46 +297,8 @@ export default function DriverBookingDetailPage() {
                   >
                     Start Shift
                   </button>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-text-dark">Upload Pickup Photo</p>
-                    <PhotoUpload
-                      label="Pickup condition photos"
-                      files={pickupPhotos}
-                      onFilesChange={(updatedFiles, err) => {
-                        setPickupPhotos(updatedFiles);
-                        setPickupPhotosError(err);
-                      }}
-                      error={pickupPhotosError}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleStart}
-                        disabled={isSubmitting}
-                        className="flex items-center gap-2 px-4 py-2 bg-accent-orange text-white text-sm font-bold rounded-full hover:bg-accent-orange-light transition-colors disabled:opacity-50"
-                      >
-                        {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-                        Confirm Start
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowStartForm(false); setPickupPhotos([]); setPickupPhotosError(null); }}
-                        className="flex items-center gap-2 px-4 py-2 border-2 border-gray-200 text-text-gray text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
-                      >
-                        <X size={14} />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 )}
-              </>
-            )}
-
-            {/* Complete Shift (IN_PROGRESS) */}
-            {booking.status === BOOKING_STATUS.IN_PROGRESS && (
-              <>
-                {!showCompleteForm ? (
+                {booking.status === BOOKING_STATUS.IN_PROGRESS && (
                   <button
                     type="button"
                     onClick={() => setShowCompleteForm(true)}
@@ -409,40 +306,138 @@ export default function DriverBookingDetailPage() {
                   >
                     Complete Shift
                   </button>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-text-dark">Upload Return Photo</p>
-                    <PhotoUpload
-                      label="Return condition photos"
-                      files={returnPhotos}
-                      onFilesChange={(updatedFiles, err) => {
-                        setReturnPhotos(updatedFiles);
-                        setReturnPhotosError(err);
-                      }}
-                      error={returnPhotosError}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleComplete}
-                        disabled={isSubmitting}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-full hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-                        Confirm Completion
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowCompleteForm(false); setReturnPhotos([]); setReturnPhotosError(null); }}
-                        className="flex items-center gap-2 px-4 py-2 border-2 border-gray-200 text-text-gray text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
-                      >
-                        <X size={14} />
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 )}
-              </>
+                {(booking.status === BOOKING_STATUS.PENDING || booking.status === BOOKING_STATUS.CONFIRMED) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelForm(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 border-2 border-red-300 text-red-500 text-sm font-semibold rounded-full hover:bg-red-50 transition-colors"
+                  >
+                    Cancel Booking
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Start Shift form (CONFIRMED) */}
+            {booking.status === BOOKING_STATUS.CONFIRMED && showStartForm && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-text-dark">Upload Pickup Photo</p>
+                <PhotoUpload
+                  label="Pickup condition photos"
+                  files={pickupPhotos}
+                  onFilesChange={(updatedFiles, err) => {
+                    setPickupPhotos(updatedFiles);
+                    setPickupPhotosError(err);
+                  }}
+                  error={pickupPhotosError}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleStart}
+                    disabled={isSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-accent-orange text-white text-sm font-bold rounded-full hover:bg-accent-orange-light transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                    Confirm Start
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowStartForm(false); setPickupPhotos([]); setPickupPhotosError(null); }}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-gray-200 text-text-gray text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    <X size={14} />
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Complete Shift form (IN_PROGRESS) */}
+            {booking.status === BOOKING_STATUS.IN_PROGRESS && showCompleteForm && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-text-dark">Upload Return Photo</p>
+                <PhotoUpload
+                  label="Return condition photos"
+                  files={returnPhotos}
+                  onFilesChange={(updatedFiles, err) => {
+                    setReturnPhotos(updatedFiles);
+                    setReturnPhotosError(err);
+                  }}
+                  error={returnPhotosError}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleComplete}
+                    disabled={isSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-full hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                    Confirm Completion
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCompleteForm(false); setReturnPhotos([]); setReturnPhotosError(null); }}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-gray-200 text-text-gray text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    <X size={14} />
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Cancel Booking form */}
+            {showCancelForm && (
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-text-dark">
+                  Cancellation Reason
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => {
+                    setCancelReason(e.target.value);
+                    if (cancelReasonError) setCancelReasonError(null);
+                  }}
+                  onBlur={() => {
+                    const err = validateBookingField('reason', cancelReason);
+                    setCancelReasonError(err);
+                  }}
+                  maxLength={MAX_REASON_LENGTH}
+                  rows={3}
+                  placeholder="Provide a reason for cancellation..."
+                  className={`w-full px-3 py-2 border-2 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-300 ${
+                    cancelReasonError ? 'border-red-400' : 'border-gray-200'
+                  }`}
+                />
+                {cancelReasonError && (
+                  <p className="text-xs text-red-500">{cancelReasonError}</p>
+                )}
+                <p className="text-xs text-text-gray text-right">
+                  {cancelReason.length}/{MAX_REASON_LENGTH}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={isSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white text-sm font-bold rounded-full hover:bg-red-600 transition-colors disabled:opacity-50"
+                  >
+                    {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                    Confirm Cancellation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCancelForm(false); setCancelReason(''); setCancelReasonError(null); }}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-gray-200 text-text-gray text-sm font-semibold rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    <X size={14} />
+                    Back
+                  </button>
+                </div>
+              </div>
             )}
           </section>
         )}

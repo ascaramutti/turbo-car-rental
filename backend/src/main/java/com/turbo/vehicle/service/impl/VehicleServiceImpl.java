@@ -25,8 +25,11 @@ import com.turbo.vehicle.service.command.GetVehicleCommand;
 import com.turbo.vehicle.service.command.RegisterVehicleCommand;
 import com.turbo.vehicle.service.command.UpdateVehicleCommand;
 import com.turbo.vehicle.service.mapper.VehicleServiceMapper;
+import com.turbo.booking.validation.BookingValidationConstraints;
 import com.turbo.vehicle.validation.VehicleValidationConstraints;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +40,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class VehicleServiceImpl implements VehicleService {
 
     private final VehicleRepository vehicleRepository;
@@ -118,6 +122,21 @@ public class VehicleServiceImpl implements VehicleService {
         vehicle.setIsActive(false);
         vehicle.setAvailableUntil(null);
         vehicleRepository.save(vehicle);
+    }
+
+    /** Auto-deactivates vehicles whose availableUntil has expired (runs every 5 minutes). */
+    @Scheduled(cron = BookingValidationConstraints.EVERY_FIVE_MINUTES_CRON)
+    @Transactional
+    public void autoDeactivateExpiredVehicles() {
+        List<Vehicle> expired = vehicleRepository.findExpiredActiveVehicles(LocalDateTime.now());
+        expired.forEach(v -> {
+            v.setIsActive(false);
+            v.setAvailableUntil(null);
+        });
+        if (!expired.isEmpty()) {
+            vehicleRepository.saveAll(expired);
+            log.info("Auto-deactivated {} expired vehicles", expired.size());
+        }
     }
 
     @Override

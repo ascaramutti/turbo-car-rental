@@ -6,6 +6,9 @@ import DriverBookingDetailPage from '../pages/DriverBookingDetailPage';
 import * as bookingApi from '../api/bookingApi';
 
 vi.mock('../api/bookingApi');
+vi.mock('../components/AuthImage', () => ({
+  default: ({ src, alt, className }) => <img src={src} alt={alt} className={className} />,
+}));
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {

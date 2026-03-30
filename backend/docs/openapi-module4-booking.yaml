@@ -929,6 +929,34 @@ paths:
                 status: 404
                 timestamp: "2026-03-17T10:00:00.000"
 
+  # ── Driver: Hours Summary ───────────────────────────────────────
+
+  /api/driver/bookings/hours-summary:
+    get:
+      tags: [DriverBooking]
+      summary: Get driver hours usage summary
+      description: |
+        Returns the driver's booking hours summary for the current week (Monday to Sunday).
+        Used to display the "Hours Used / 24 Hours" counter in the driver dashboard header.
+        The 24-hour limit is based on study permit work restrictions.
+        Requires JWT authentication with DRIVER role.
+      operationId: getDriverHoursSummary
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Hours summary returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverHoursSummaryResponse'
+              example:
+                hoursUsedThisWeek: 12
+                maxHoursPerWeek: 24
+                hoursRemaining: 12
+        '401':
+          description: Not authenticated
+
   # ── Driver: Vehicle Location ────────────────────────────────────
 
   /api/driver/bookings/{bookingId}/vehicle-location:
@@ -1016,6 +1044,38 @@ paths:
                 timestamp: "2026-03-17T10:00:00.000"
 
   # ── Owner: List Bookings ────────────────────────────────────────
+
+  # ── Owner: Dashboard Stats ──────────────────────────────────────
+
+  /api/owner/dashboard:
+    get:
+      tags: [OwnerBooking]
+      summary: Get owner dashboard statistics
+      description: |
+        Returns aggregated statistics for the car owner's dashboard:
+        active vehicle count, earnings summary, rating, and completed booking count.
+        Earnings are computed from completed bookings (totalPrice sum).
+        Requires JWT authentication with CAR_OWNER role.
+      operationId: getOwnerDashboardStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard stats returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerDashboardResponse'
+              example:
+                activeVehicles: 2
+                totalEarnings: 1250.00
+                monthEarnings: 320.00
+                completedBookings: 8
+                rating: 4.5
+        '401':
+          description: Not authenticated
+
+  # ── Owner: Bookings List ───────────────────────────────────────
 
   /api/owner/bookings:
     get:
@@ -2050,6 +2110,54 @@ components:
               nullable: true
               description: "Informational warning about service type restrictions. Null when no mismatch."
               example: null
+
+    # ── Dashboard Schemas ──────────────────────────────────────────
+
+    DriverHoursSummaryResponse:
+      type: object
+      description: "Driver's weekly hours usage summary for the 24h study permit counter."
+      properties:
+        hoursUsedThisWeek:
+          type: integer
+          description: "Total hours from CONFIRMED + IN_PROGRESS + COMPLETED bookings this week (Mon-Sun)"
+          example: 12
+        maxHoursPerWeek:
+          type: integer
+          description: "Maximum allowed hours per week (study permit restriction)"
+          example: 24
+        hoursRemaining:
+          type: integer
+          description: "Hours remaining this week (maxHoursPerWeek - hoursUsedThisWeek)"
+          example: 12
+
+    OwnerDashboardResponse:
+      type: object
+      description: "Aggregated statistics for the car owner dashboard."
+      properties:
+        activeVehicles:
+          type: integer
+          description: "Count of owner's vehicles where isActive = true"
+          example: 2
+        totalEarnings:
+          type: number
+          format: double
+          description: "Sum of totalPrice from all COMPLETED bookings for owner's vehicles"
+          example: 1250.00
+        monthEarnings:
+          type: number
+          format: double
+          description: "Sum of totalPrice from COMPLETED bookings this month"
+          example: 320.00
+        completedBookings:
+          type: integer
+          description: "Count of COMPLETED bookings for owner's vehicles"
+          example: 8
+        rating:
+          type: number
+          format: float
+          nullable: true
+          description: "Owner's average rating (0.0 - 5.0)"
+          example: 4.5
 
     # ── Error Schemas ─────────────────────────────────────────────
 

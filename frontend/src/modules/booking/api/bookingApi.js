@@ -156,6 +156,27 @@ export function cancelOwnerBooking(bookingId, reason) {
   return api.put(BOOKING_ENDPOINTS.CANCEL_OWNER_BOOKING(bookingId), { reason });
 }
 
+// ── Driver — Hours Summary ───────────────────────────────────────────────
+
+/**
+ * Returns the driver's hours-used summary for the current week.
+ * Used by the Navbar badge to display "X / 24 hrs".
+ * @returns {Promise} Axios response with { hoursUsed, weeklyLimit }
+ */
+export function getDriverHoursSummary() {
+  return api.get('/driver/bookings/hours-summary');
+}
+
+// ── Owner — Dashboard Stats ──────────────────────────────────────────────
+
+/**
+ * Returns aggregated stats for the authenticated car owner's dashboard.
+ * @returns {Promise} Axios response with { activeVehicles, totalEarnings, monthEarnings, rating, recentBookings }
+ */
+export function getOwnerDashboardStats() {
+  return api.get('/owner/dashboard');
+}
+
 // ── Admin — Read-Only Overview ───────────────────────────────────────────
 
 /**

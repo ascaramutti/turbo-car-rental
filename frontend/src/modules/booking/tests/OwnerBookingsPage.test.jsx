@@ -44,12 +44,12 @@ describe('OwnerBookingsPage', () => {
     vi.clearAllMocks();
   });
 
-  it('shows page title "Booking Requests"', async () => {
+  it('shows page title "Upcoming Bookings"', async () => {
     bookingApi.getOwnerBookings.mockResolvedValue({ data: [] });
     renderWithProviders(<OwnerBookingsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Booking Requests')).toBeInTheDocument();
+      expect(screen.getByText('Upcoming Bookings')).toBeInTheDocument();
     });
   });
 

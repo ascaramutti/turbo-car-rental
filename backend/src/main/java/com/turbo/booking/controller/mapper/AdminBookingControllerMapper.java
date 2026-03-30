@@ -55,8 +55,8 @@ public interface AdminBookingControllerMapper {
     @Mapping(target = "startedAt", expression = "java(booking.getStartedAt() != null ? booking.getStartedAt().toString() : null)")
     @Mapping(target = "completedAt", expression = "java(booking.getCompletedAt() != null ? booking.getCompletedAt().toString() : null)")
     @Mapping(target = "cancelledAt", expression = "java(booking.getCancelledAt() != null ? booking.getCancelledAt().toString() : null)")
-    @Mapping(target = "pickupPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_PICKUP.equals(p.getPhotoType())).map(com.turbo.booking.model.BookingPhoto::getFileUrl).collect(java.util.stream.Collectors.toList()))")
-    @Mapping(target = "returnPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_RETURN.equals(p.getPhotoType())).map(com.turbo.booking.model.BookingPhoto::getFileUrl).collect(java.util.stream.Collectors.toList()))")
+    @Mapping(target = "pickupPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_PICKUP.equals(p.getPhotoType())).map(p -> \"/bookings/photos/\" + p.getPhotoId()).collect(java.util.stream.Collectors.toList()))")
+    @Mapping(target = "returnPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_RETURN.equals(p.getPhotoType())).map(p -> \"/bookings/photos/\" + p.getPhotoId()).collect(java.util.stream.Collectors.toList()))")
     @Mapping(target = "effectiveServiceType", ignore = true)
     @Mapping(target = "serviceTypeWarning", ignore = true)
     AdminBookingDetailResponse toAdminBookingDetailResponse(Booking booking);

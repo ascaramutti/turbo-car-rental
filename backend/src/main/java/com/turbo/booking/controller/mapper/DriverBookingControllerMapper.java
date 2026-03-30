@@ -3,6 +3,7 @@ package com.turbo.booking.controller.mapper;
 import com.turbo.booking.dto.BookingDetailResponse;
 import com.turbo.booking.dto.BookingResponse;
 import com.turbo.booking.dto.CreateBookingRequest;
+import com.turbo.booking.dto.DriverHoursSummaryResponse;
 import com.turbo.booking.dto.VehicleBookingDetailResponse;
 import com.turbo.booking.dto.VehicleLocationResponse;
 import com.turbo.booking.dto.VehicleSearchResponse;
@@ -13,9 +14,9 @@ import com.turbo.booking.service.command.CreateBookingCommand;
 import com.turbo.booking.service.command.GetBookingCommand;
 import com.turbo.booking.service.command.SearchVehiclesCommand;
 import com.turbo.booking.service.command.StartBookingCommand;
+import com.turbo.booking.service.result.DriverHoursSummary;
 import com.turbo.booking.service.result.LocationResult;
 import com.turbo.booking.service.result.VehicleSearchResult;
-import com.turbo.vehicle.model.Vehicle;
 import org.mapstruct.IterableMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -25,7 +26,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Mapper(componentModel = "spring")
 public interface DriverBookingControllerMapper {
@@ -112,79 +112,73 @@ public interface DriverBookingControllerMapper {
     @Mapping(target = "startedAt", expression = "java(booking.getStartedAt() != null ? booking.getStartedAt().toString() : null)")
     @Mapping(target = "completedAt", expression = "java(booking.getCompletedAt() != null ? booking.getCompletedAt().toString() : null)")
     @Mapping(target = "cancelledAt", expression = "java(booking.getCancelledAt() != null ? booking.getCancelledAt().toString() : null)")
-    @Mapping(target = "pickupPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_PICKUP.equals(p.getPhotoType())).map(com.turbo.booking.model.BookingPhoto::getFileUrl).collect(java.util.stream.Collectors.toList()))")
-    @Mapping(target = "returnPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_RETURN.equals(p.getPhotoType())).map(com.turbo.booking.model.BookingPhoto::getFileUrl).collect(java.util.stream.Collectors.toList()))")
+    @Mapping(target = "pickupPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_PICKUP.equals(p.getPhotoType())).map(p -> \"/bookings/photos/\" + p.getPhotoId()).collect(java.util.stream.Collectors.toList()))")
+    @Mapping(target = "returnPhotoUrls", expression = "java(booking.getPhotos().stream().filter(p -> com.turbo.booking.validation.BookingValidationConstraints.PHOTO_TYPE_RETURN.equals(p.getPhotoType())).map(p -> \"/bookings/photos/\" + p.getPhotoId()).collect(java.util.stream.Collectors.toList()))")
     @Mapping(target = "effectiveServiceType", ignore = true)
     @Mapping(target = "serviceTypeWarning", ignore = true)
     BookingDetailResponse toBookingDetailResponse(Booking booking);
 
     // ── VehicleSearchResult → DTO mappings ───────────────────────────
 
-    /** Converts a VehicleSearchResult domain object to a VehicleSearchResponse DTO. */
-    default VehicleSearchResponse toVehicleSearchResponse(VehicleSearchResult result) {
-        Vehicle v = result.getVehicle();
-        VehicleSearchResponse dto = new VehicleSearchResponse();
-        dto.setVehicleId(v.getVehicleId());
-        dto.setMake(v.getMake());
-        dto.setModel(v.getModel());
-        dto.setYear(v.getYear());
-        dto.setCategory(v.getCategory().name());
-        dto.setFuelType(v.getFuelType().name());
-        dto.setServiceType(v.getServiceType() != null ? v.getServiceType().name() : null);
-        dto.setHourlyRate(v.getHourlyRate());
-        dto.setDescription(v.getDescription());
-        dto.setGeneralLocation(v.getGeneralLocation());
-        dto.setMaskedLatitude(v.getLatitude() != null ? result.getMaskedLatitude() : null);
-        dto.setMaskedLongitude(v.getLongitude() != null ? result.getMaskedLongitude() : null);
-        dto.setAvailableUntil(v.getAvailableUntil() != null ? v.getAvailableUntil().toString() : null);
-        dto.setOwnerFullName(v.getOwner().getFirstName() + " " + v.getOwner().getLastName());
-        dto.setOwnerRating(v.getOwner().getRating());
-        dto.setEffectiveServiceType(result.getEffectiveServiceType());
-        dto.setServiceTypeWarning(result.getServiceTypeWarning());
-        return dto;
-    }
+    @Named("toVehicleSearchResponse")
+    @Mapping(source = "vehicle.vehicleId", target = "vehicleId")
+    @Mapping(source = "vehicle.make", target = "make")
+    @Mapping(source = "vehicle.model", target = "model")
+    @Mapping(source = "vehicle.year", target = "year")
+    @Mapping(target = "category", expression = "java(result.getVehicle().getCategory().name())")
+    @Mapping(target = "fuelType", expression = "java(result.getVehicle().getFuelType().name())")
+    @Mapping(target = "serviceType", expression = "java(result.getVehicle().getServiceType() != null ? result.getVehicle().getServiceType().name() : null)")
+    @Mapping(source = "vehicle.hourlyRate", target = "hourlyRate")
+    @Mapping(source = "vehicle.description", target = "description")
+    @Mapping(source = "vehicle.generalLocation", target = "generalLocation")
+    @Mapping(target = "maskedLatitude", expression = "java(result.getVehicle().getLatitude() != null ? result.getMaskedLatitude() : null)")
+    @Mapping(target = "maskedLongitude", expression = "java(result.getVehicle().getLongitude() != null ? result.getMaskedLongitude() : null)")
+    @Mapping(target = "availableUntil", expression = "java(result.getVehicle().getAvailableUntil() != null ? result.getVehicle().getAvailableUntil().toString() : null)")
+    @Mapping(target = "ownerFullName", expression = "java(result.getVehicle().getOwner().getFirstName() + \" \" + result.getVehicle().getOwner().getLastName())")
+    @Mapping(source = "vehicle.owner.rating", target = "ownerRating")
+    @Mapping(source = "effectiveServiceType", target = "effectiveServiceType")
+    @Mapping(source = "serviceTypeWarning", target = "serviceTypeWarning")
+    VehicleSearchResponse toVehicleSearchResponse(VehicleSearchResult result);
 
-    /** Converts a list of VehicleSearchResult objects to a list of VehicleSearchResponse DTOs. */
-    default List<VehicleSearchResponse> toVehicleSearchResponseList(List<VehicleSearchResult> results) {
-        return results.stream().map(this::toVehicleSearchResponse).collect(Collectors.toList());
-    }
+    @IterableMapping(qualifiedByName = "toVehicleSearchResponse")
+    List<VehicleSearchResponse> toVehicleSearchResponseList(List<VehicleSearchResult> results);
 
-    /** Converts a VehicleSearchResult to a VehicleBookingDetailResponse DTO (adds VIN, licensePlate, ownerId). */
-    default VehicleBookingDetailResponse toVehicleBookingDetailResponse(VehicleSearchResult result) {
-        Vehicle v = result.getVehicle();
-        VehicleBookingDetailResponse dto = new VehicleBookingDetailResponse();
-        dto.setVehicleId(v.getVehicleId());
-        dto.setMake(v.getMake());
-        dto.setModel(v.getModel());
-        dto.setYear(v.getYear());
-        dto.setCategory(v.getCategory().name());
-        dto.setFuelType(v.getFuelType().name());
-        dto.setServiceType(v.getServiceType() != null ? v.getServiceType().name() : null);
-        dto.setHourlyRate(v.getHourlyRate());
-        dto.setDescription(v.getDescription());
-        dto.setGeneralLocation(v.getGeneralLocation());
-        dto.setMaskedLatitude(v.getLatitude() != null ? result.getMaskedLatitude() : null);
-        dto.setMaskedLongitude(v.getLongitude() != null ? result.getMaskedLongitude() : null);
-        dto.setAvailableUntil(v.getAvailableUntil() != null ? v.getAvailableUntil().toString() : null);
-        dto.setOwnerFullName(v.getOwner().getFirstName() + " " + v.getOwner().getLastName());
-        dto.setOwnerRating(v.getOwner().getRating());
-        dto.setEffectiveServiceType(result.getEffectiveServiceType());
-        dto.setServiceTypeWarning(result.getServiceTypeWarning());
-        dto.setLicensePlate(v.getLicensePlate());
-        dto.setOwnerId(v.getOwner().getUserId());
-        dto.setVin(v.getVin());
-        return dto;
-    }
+    @Mapping(source = "vehicle.vehicleId", target = "vehicleId")
+    @Mapping(source = "vehicle.make", target = "make")
+    @Mapping(source = "vehicle.model", target = "model")
+    @Mapping(source = "vehicle.year", target = "year")
+    @Mapping(target = "category", expression = "java(result.getVehicle().getCategory().name())")
+    @Mapping(target = "fuelType", expression = "java(result.getVehicle().getFuelType().name())")
+    @Mapping(target = "serviceType", expression = "java(result.getVehicle().getServiceType() != null ? result.getVehicle().getServiceType().name() : null)")
+    @Mapping(source = "vehicle.hourlyRate", target = "hourlyRate")
+    @Mapping(source = "vehicle.description", target = "description")
+    @Mapping(source = "vehicle.generalLocation", target = "generalLocation")
+    @Mapping(target = "maskedLatitude", expression = "java(result.getVehicle().getLatitude() != null ? result.getMaskedLatitude() : null)")
+    @Mapping(target = "maskedLongitude", expression = "java(result.getVehicle().getLongitude() != null ? result.getMaskedLongitude() : null)")
+    @Mapping(target = "availableUntil", expression = "java(result.getVehicle().getAvailableUntil() != null ? result.getVehicle().getAvailableUntil().toString() : null)")
+    @Mapping(target = "ownerFullName", expression = "java(result.getVehicle().getOwner().getFirstName() + \" \" + result.getVehicle().getOwner().getLastName())")
+    @Mapping(source = "vehicle.owner.rating", target = "ownerRating")
+    @Mapping(source = "effectiveServiceType", target = "effectiveServiceType")
+    @Mapping(source = "serviceTypeWarning", target = "serviceTypeWarning")
+    @Mapping(source = "vehicle.licensePlate", target = "licensePlate")
+    @Mapping(source = "vehicle.owner.userId", target = "ownerId")
+    @Mapping(source = "vehicle.vin", target = "vin")
+    VehicleBookingDetailResponse toVehicleBookingDetailResponse(VehicleSearchResult result);
 
-    /** Converts a LocationResult domain object to a VehicleLocationResponse DTO. */
-    default VehicleLocationResponse toVehicleLocationResponse(LocationResult result) {
-        VehicleLocationResponse dto = new VehicleLocationResponse();
-        dto.setVehicleId(result.getVehicleId());
-        dto.setIsExactLocation(result.isExactLocation());
-        dto.setGeneralLocation(result.getGeneralLocation());
-        dto.setLatitude(result.getLatitude());
-        dto.setLongitude(result.getLongitude());
-        dto.setMessage(result.getMessage());
-        return dto;
-    }
+    // ── LocationResult → DTO ─────────────────────────────────────────
+
+    @Mapping(source = "vehicleId", target = "vehicleId")
+    @Mapping(source = "exactLocation", target = "isExactLocation")
+    @Mapping(source = "generalLocation", target = "generalLocation")
+    @Mapping(source = "latitude", target = "latitude")
+    @Mapping(source = "longitude", target = "longitude")
+    @Mapping(source = "message", target = "message")
+    VehicleLocationResponse toVehicleLocationResponse(LocationResult result);
+
+    // ── DriverHoursSummary → DTO ─────────────────────────────────────
+
+    @Mapping(source = "hoursUsedThisWeek", target = "hoursUsedThisWeek")
+    @Mapping(source = "maxHoursPerWeek", target = "maxHoursPerWeek")
+    @Mapping(source = "hoursRemaining", target = "hoursRemaining")
+    DriverHoursSummaryResponse toDriverHoursSummaryResponse(DriverHoursSummary summary);
 }

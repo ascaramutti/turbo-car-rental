@@ -36,11 +36,10 @@ export default function LocationDisplay({ location }) {
         <span>{generalLocation}</span>
       </div>
 
-      {/* Coordinates */}
-      {latitude != null && longitude != null && (
+      {/* Coordinates — only shown when exact */}
+      {isExactLocation && latitude != null && longitude != null && (
         <p className="text-xs text-text-gray mt-1">
           Coordinates: {latitude.toFixed(4)}, {longitude.toFixed(4)}
-          {!isExactLocation && ' (approx.)'}
         </p>
       )}
 

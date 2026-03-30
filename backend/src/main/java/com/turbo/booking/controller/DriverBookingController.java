@@ -5,11 +5,13 @@ import com.turbo.booking.dto.BookingDetailResponse;
 import com.turbo.booking.dto.BookingResponse;
 import com.turbo.booking.dto.CancelBookingRequest;
 import com.turbo.booking.dto.CreateBookingRequest;
+import com.turbo.booking.dto.DriverHoursSummaryResponse;
 import com.turbo.booking.dto.VehicleBookingDetailResponse;
 import com.turbo.booking.dto.VehicleLocationResponse;
 import com.turbo.booking.dto.VehicleSearchResponse;
 import com.turbo.booking.model.Booking;
 import com.turbo.booking.service.BookingService;
+import com.turbo.booking.service.result.DriverHoursSummary;
 import com.turbo.booking.service.result.LocationResult;
 import com.turbo.booking.service.result.VehicleSearchResult;
 import com.turbo.booking.validation.BookingValidationConstraints;
@@ -40,6 +42,13 @@ public class DriverBookingController {
     private final BookingService bookingService;
     private final DriverBookingControllerMapper controllerMapper;
     private final SecurityHelper securityHelper;
+
+    @GetMapping("/hours-summary")
+    public ResponseEntity<DriverHoursSummaryResponse> getHoursSummary() {
+        User user = securityHelper.getCurrentUser();
+        DriverHoursSummary summary = bookingService.getDriverHoursSummary(user.getUserId());
+        return ResponseEntity.ok(controllerMapper.toDriverHoursSummaryResponse(summary));
+    }
 
     @GetMapping("/vehicles/search")
     public ResponseEntity<List<VehicleSearchResponse>> searchAvailableVehicles(
@@ -133,4 +142,5 @@ public class DriverBookingController {
                 controllerMapper.toGetCommand(bookingId, user.getUserId()));
         return ResponseEntity.ok(controllerMapper.toVehicleLocationResponse(result));
     }
+
 }

@@ -2,21 +2,34 @@ package com.turbo.booking.service.impl;
 
 import com.turbo.booking.fixture.BookingFixture;
 import com.turbo.booking.model.Booking;
+import com.turbo.booking.service.mapper.BookingServiceMapper;
 import com.turbo.booking.service.result.LocationResult;
 import com.turbo.booking.validation.BookingValidationConstraints;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 @DisplayName("LocationMaskServiceImpl")
 class LocationMaskServiceImplTest {
 
-    private final LocationMaskServiceImpl locationMaskService = new LocationMaskServiceImpl();
+    @Mock
+    private BookingServiceMapper serviceMapper;
+
+    @InjectMocks
+    private LocationMaskServiceImpl locationMaskService;
 
     // ── maskCoordinate ────────────────────────────────────────────────
 
@@ -146,6 +159,14 @@ class LocationMaskServiceImplTest {
             booking.setPickupLatitude(45.5017);
             booking.setPickupLongitude(-73.5673);
 
+            double maskedLat = Math.round(45.5017 * 100.0) / 100.0; // 45.50
+            double maskedLng = Math.round(-73.5673 * 100.0) / 100.0; // -73.57
+            LocationResult stubResult = new LocationResult(
+                    BookingFixture.VEHICLE_ID, false, booking.getPickupLocation(),
+                    maskedLat, maskedLng, "Exact location will be available 2 hours before your booking");
+            when(serviceMapper.toLocationResult(any(), anyBoolean(), any(), any(), any(), anyString()))
+                    .thenReturn(stubResult);
+
             LocationResult response = locationMaskService.buildLocationResponse(booking);
 
             assertThat(response.isExactLocation()).isFalse();
@@ -162,6 +183,12 @@ class LocationMaskServiceImplTest {
             booking.setPickupLatitude(45.5017);
             booking.setPickupLongitude(-73.5673);
 
+            LocationResult stubResult = new LocationResult(
+                    BookingFixture.VEHICLE_ID, true, booking.getPickupLocation(),
+                    45.5017, -73.5673, "Exact pickup location is now available");
+            when(serviceMapper.toLocationResult(any(), anyBoolean(), any(), any(), any(), anyString()))
+                    .thenReturn(stubResult);
+
             LocationResult response = locationMaskService.buildLocationResponse(booking);
 
             assertThat(response.isExactLocation()).isTrue();
@@ -177,6 +204,12 @@ class LocationMaskServiceImplTest {
             booking.setPickupLatitude(45.5017);
             booking.setPickupLongitude(-73.5673);
 
+            LocationResult stubResult = new LocationResult(
+                    BookingFixture.VEHICLE_ID, true, booking.getPickupLocation(),
+                    45.5017, -73.5673, "Exact pickup location is now available");
+            when(serviceMapper.toLocationResult(any(), anyBoolean(), any(), any(), any(), anyString()))
+                    .thenReturn(stubResult);
+
             LocationResult response = locationMaskService.buildLocationResponse(booking);
 
             assertThat(response.isExactLocation()).isTrue();
@@ -191,6 +224,12 @@ class LocationMaskServiceImplTest {
             booking.setPickupLatitude(null);
             booking.setPickupLongitude(null);
 
+            LocationResult stubResult = new LocationResult(
+                    BookingFixture.VEHICLE_ID, false, booking.getPickupLocation(),
+                    null, null, "Exact location will be available 2 hours before your booking");
+            when(serviceMapper.toLocationResult(any(), anyBoolean(), any(), any(), any(), anyString()))
+                    .thenReturn(stubResult);
+
             LocationResult response = locationMaskService.buildLocationResponse(booking);
 
             assertThat(response.getLatitude()).isNull();
@@ -203,6 +242,13 @@ class LocationMaskServiceImplTest {
             Booking booking = BookingFixture.confirmedBooking();
             booking.setStartTime(LocalDateTime.now().plusHours(1));
 
+            LocationResult stubResult = new LocationResult(
+                    BookingFixture.VEHICLE_ID, true, booking.getPickupLocation(),
+                    booking.getPickupLatitude(), booking.getPickupLongitude(),
+                    "Exact pickup location is now available");
+            when(serviceMapper.toLocationResult(any(), anyBoolean(), any(), any(), any(), anyString()))
+                    .thenReturn(stubResult);
+
             LocationResult response = locationMaskService.buildLocationResponse(booking);
 
             assertThat(response.getVehicleId()).isEqualTo(BookingFixture.VEHICLE_ID);
@@ -214,6 +260,13 @@ class LocationMaskServiceImplTest {
             Booking booking = BookingFixture.confirmedBooking();
             booking.setStartTime(LocalDateTime.now().plusHours(1));
             booking.setPickupLocation("Downtown Montreal");
+
+            LocationResult stubResult = new LocationResult(
+                    BookingFixture.VEHICLE_ID, true, "Downtown Montreal",
+                    booking.getPickupLatitude(), booking.getPickupLongitude(),
+                    "Exact pickup location is now available");
+            when(serviceMapper.toLocationResult(any(), anyBoolean(), any(), any(), any(), anyString()))
+                    .thenReturn(stubResult);
 
             LocationResult response = locationMaskService.buildLocationResponse(booking);
 

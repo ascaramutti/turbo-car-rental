@@ -7,6 +7,7 @@ import com.turbo.booking.dto.BookingDetailResponse;
 import com.turbo.booking.dto.BookingResponse;
 import com.turbo.booking.dto.CancelBookingRequest;
 import com.turbo.booking.dto.CreateBookingRequest;
+import com.turbo.booking.dto.DriverHoursSummaryResponse;
 import com.turbo.booking.dto.VehicleBookingDetailResponse;
 import com.turbo.booking.dto.VehicleLocationResponse;
 import com.turbo.booking.dto.VehicleSearchResponse;
@@ -19,6 +20,7 @@ import com.turbo.booking.service.command.CreateBookingCommand;
 import com.turbo.booking.service.command.GetBookingCommand;
 import com.turbo.booking.service.command.SearchVehiclesCommand;
 import com.turbo.booking.service.command.StartBookingCommand;
+import com.turbo.booking.service.result.DriverHoursSummary;
 import com.turbo.booking.service.result.LocationResult;
 import com.turbo.booking.service.result.VehicleSearchResult;
 import com.turbo.config.SecurityHelper;
@@ -75,6 +77,44 @@ class DriverBookingControllerTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         lenient().when(securityHelper.getCurrentUser()).thenReturn(BookingFixture.verifiedDriver());
+    }
+
+    // ── GET /api/driver/bookings/hours-summary ────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/driver/bookings/hours-summary")
+    class GetHoursSummary {
+
+        @Test
+        @DisplayName("Valid request - returns 200 with hours summary")
+        void getHoursSummary_valid_returns200() throws Exception {
+            DriverHoursSummary summary = BookingFixture.driverHoursSummary();
+            DriverHoursSummaryResponse response = BookingFixture.driverHoursSummaryResponse();
+
+            when(bookingService.getDriverHoursSummary(BookingFixture.DRIVER_ID)).thenReturn(summary);
+            when(controllerMapper.toDriverHoursSummaryResponse(summary)).thenReturn(response);
+
+            mockMvc.perform(get("/api/driver/bookings/hours-summary"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.hoursUsedThisWeek").value(8))
+                    .andExpect(jsonPath("$.maxHoursPerWeek").value(24))
+                    .andExpect(jsonPath("$.hoursRemaining").value(16));
+        }
+
+        @Test
+        @DisplayName("Driver at max hours - returns hoursRemaining of 0")
+        void getHoursSummary_atMaxHours_returns200WithZeroRemaining() throws Exception {
+            DriverHoursSummary summary = new DriverHoursSummary(24, 24, 0);
+            DriverHoursSummaryResponse response = new DriverHoursSummaryResponse(24, 24, 0);
+
+            when(bookingService.getDriverHoursSummary(BookingFixture.DRIVER_ID)).thenReturn(summary);
+            when(controllerMapper.toDriverHoursSummaryResponse(summary)).thenReturn(response);
+
+            mockMvc.perform(get("/api/driver/bookings/hours-summary"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.hoursUsedThisWeek").value(24))
+                    .andExpect(jsonPath("$.hoursRemaining").value(0));
+        }
     }
 
     // ── GET /api/driver/bookings/vehicles/search ──────────────────────

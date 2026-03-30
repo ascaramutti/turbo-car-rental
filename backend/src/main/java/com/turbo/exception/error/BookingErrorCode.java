@@ -31,6 +31,7 @@ public enum BookingErrorCode implements ErrorCode {
     RETURN_PHOTO_REQUIRED("BOOK-021", "At least one return photo is required to complete the shift", HttpStatus.BAD_REQUEST),
     CANCELLATION_REASON_REQUIRED("BOOK-022", "Cancellation reason is required", HttpStatus.BAD_REQUEST),
     REJECTION_REASON_REQUIRED("BOOK-023", "Rejection reason is required", HttpStatus.BAD_REQUEST),
+    DRIVER_NOT_FOUND("BOOK-024", "Driver not found", HttpStatus.NOT_FOUND),
     MAXIMUM_DURATION_EXCEEDED("BOOK-025", "Maximum booking duration is 24 hours", HttpStatus.BAD_REQUEST),
     TOO_MANY_PHOTOS("BOOK-026", "Maximum 10 photos allowed per upload", HttpStatus.BAD_REQUEST);
 

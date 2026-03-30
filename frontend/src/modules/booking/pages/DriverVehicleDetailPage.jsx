@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { getVehicleDetail, createBooking } from '../api/bookingApi';
 import { extractErrorMessage } from '../../auth/utils/validation';
 import BookingForm from '../components/BookingForm';
+import { SERVICE_TYPE_LABELS } from '../../vehicles/constants/vehicleConstants';
 
 /** Success message shown after a booking is created. */
 const BOOKING_CREATED_MESSAGE = 'Booking request submitted! The owner will review it shortly.';
@@ -95,7 +96,7 @@ export default function DriverVehicleDetailPage() {
 
           <div className="grid grid-cols-2 gap-4 text-sm mb-4">
             <InfoItem label="Fuel Type" value={vehicle.fuelType} />
-            <InfoItem label="Service Type" value={vehicle.serviceType} />
+            <InfoItem label="Service Type" value={SERVICE_TYPE_LABELS[vehicle.effectiveServiceType] || SERVICE_TYPE_LABELS[vehicle.serviceType] || vehicle.serviceType} />
             {vehicle.licensePlate && <InfoItem label="License Plate" value={vehicle.licensePlate} />}
             {vehicle.vin && <InfoItem label="VIN" value={vehicle.vin} />}
             <InfoItem

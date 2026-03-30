@@ -10,8 +10,10 @@ import {
 } from '../api/bookingApi';
 import { extractErrorMessage } from '../../auth/utils/validation';
 import { validateBookingField } from '../utils/bookingValidation';
+import AuthImage from '../components/AuthImage';
 import BookingStatusBadge from '../components/BookingStatusBadge';
 import { BOOKING_STATUS, MAX_REASON_LENGTH } from '../constants/bookingConstants';
+import { SERVICE_TYPE_LABELS, CATEGORY_LABELS } from '../../vehicles/constants/vehicleConstants';
 import { formatDateTime } from '../../../shared/utils/dateUtils';
 
 /** Success messages for each owner action. */
@@ -170,10 +172,10 @@ export default function OwnerBookingDetailPage() {
               <InfoItem label="License Plate" value={booking.vehicleLicensePlate} />
             )}
             {booking.vehicleCategory && (
-              <InfoItem label="Category" value={booking.vehicleCategory} />
+              <InfoItem label="Category" value={CATEGORY_LABELS[booking.vehicleCategory] || booking.vehicleCategory} />
             )}
             {booking.vehicleServiceType && (
-              <InfoItem label="Service Type" value={booking.vehicleServiceType} />
+              <InfoItem label="Service Type" value={SERVICE_TYPE_LABELS[booking.vehicleServiceType] || booking.vehicleServiceType} />
             )}
             {booking.vehicleHourlyRate && (
               <InfoItem label="Hourly Rate" value={`$${Number(booking.vehicleHourlyRate).toFixed(2)}/hr`} />
@@ -200,7 +202,7 @@ export default function OwnerBookingDetailPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {booking.pickupPhotoUrls.map((url, index) => (
-                  <img
+                  <AuthImage
                     key={url}
                     src={url}
                     alt={`Pickup photo ${index + 1}`}
@@ -219,7 +221,7 @@ export default function OwnerBookingDetailPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {booking.returnPhotoUrls.map((url, index) => (
-                  <img
+                  <AuthImage
                     key={url}
                     src={url}
                     alt={`Return photo ${index + 1}`}
@@ -245,7 +247,7 @@ export default function OwnerBookingDetailPage() {
         </section>
 
         {/* Actions */}
-        {!isTerminal && (
+        {(booking.status === BOOKING_STATUS.PENDING || booking.status === BOOKING_STATUS.CONFIRMED) && (
           <section className="bg-white border-2 border-gray-200 rounded-xl p-6 space-y-4">
             <h2 className="text-base font-bold text-text-dark">Actions</h2>
 

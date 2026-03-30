@@ -2,7 +2,9 @@ package com.turbo.booking.service.impl;
 
 import com.turbo.booking.fixture.BookingFixture;
 import com.turbo.booking.model.Booking;
+import com.turbo.booking.model.BookingPhoto;
 import com.turbo.booking.model.enums.BookingStatus;
+import com.turbo.booking.repository.BookingPhotoRepository;
 import com.turbo.booking.repository.BookingRepository;
 import com.turbo.booking.service.LocationMaskService;
 import com.turbo.booking.service.command.CancelBookingCommand;
@@ -12,16 +14,22 @@ import com.turbo.booking.service.command.CreateBookingCommand;
 import com.turbo.booking.service.command.GetBookingCommand;
 import com.turbo.booking.service.command.RejectBookingCommand;
 import com.turbo.booking.service.command.SearchVehiclesCommand;
-import com.turbo.booking.repository.BookingPhotoRepository;
 import com.turbo.booking.service.command.StartBookingCommand;
+import com.turbo.booking.service.mapper.BookingServiceMapper;
+import com.turbo.booking.service.result.DriverHoursSummary;
+import com.turbo.booking.service.result.LocationResult;
+import com.turbo.booking.service.result.OwnerDashboardStats;
+import com.turbo.booking.service.result.VehicleSearchResult;
 import com.turbo.booking.validation.BookingValidationConstraints;
 import com.turbo.document.service.FileStorageService;
 import com.turbo.exception.BusinessException;
 import com.turbo.exception.error.BookingErrorCode;
 import com.turbo.exception.error.DocumentErrorCode;
 import com.turbo.exception.error.VehicleErrorCode;
+import com.turbo.user.model.CarOwner;
 import com.turbo.user.model.Driver;
 import com.turbo.user.model.enums.UserRole;
+import com.turbo.user.repository.CarOwnerRepository;
 import com.turbo.user.repository.DriverRepository;
 import com.turbo.vehicle.model.Vehicle;
 import com.turbo.vehicle.model.enums.ServiceType;
@@ -33,14 +41,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.mockito.ArgumentCaptor;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -55,8 +70,10 @@ class BookingServiceImplTest {
     @Mock private BookingPhotoRepository bookingPhotoRepository;
     @Mock private VehicleRepository vehicleRepository;
     @Mock private DriverRepository driverRepository;
+    @Mock private CarOwnerRepository carOwnerRepository;
     @Mock private FileStorageService fileStorageService;
     @Mock private LocationMaskService locationMaskService;
+    @Mock private BookingServiceMapper serviceMapper;
 
     @InjectMocks private BookingServiceImpl bookingService;
 
@@ -106,6 +123,14 @@ class BookingServiceImplTest {
             mockVehicleFound(vehicle);
             mockNoVehicleConflict();
             mockNoDriverConflict();
+
+            // Build a booking with the exact same driver/vehicle instances so assertions pass
+            Booking mappedBooking = new Booking();
+            mappedBooking.setDriver(driver);
+            mappedBooking.setVehicle(vehicle);
+            mappedBooking.setStatus(BookingStatus.PENDING);
+            when(serviceMapper.toBooking(any(), eq(driver), eq(vehicle), anyInt(), any(BigDecimal.class)))
+                    .thenReturn(mappedBooking);
             mockBookingSaved(null);
 
             CreateBookingCommand command = BookingFixture.createBookingCommand();
@@ -113,8 +138,9 @@ class BookingServiceImplTest {
 
             assertThat(result).isNotNull();
             assertThat(result.getStatus()).isEqualTo(BookingStatus.PENDING);
-            assertThat(result.getDriver()).isEqualTo(driver);
-            assertThat(result.getVehicle()).isEqualTo(vehicle);
+            assertThat(result.getDriver()).isSameAs(driver);
+            assertThat(result.getVehicle()).isSameAs(vehicle);
+            verify(serviceMapper).toBooking(any(), eq(driver), eq(vehicle), anyInt(), any(BigDecimal.class));
             verify(bookingRepository).save(any(Booking.class));
         }
 
@@ -634,6 +660,8 @@ class BookingServiceImplTest {
             mockBookingFound(booking);
             mockBookingSaved(booking);
             when(fileStorageService.store(any(), any(), any())).thenReturn("bookings/200/pickup/pickup.jpg");
+            when(serviceMapper.toBookingPhoto(any(Booking.class), anyString(), anyString(), anyString(), anyLong()))
+                    .thenReturn(new BookingPhoto());
             when(bookingPhotoRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
             StartBookingCommand command = BookingFixture.startCommand();
@@ -641,6 +669,7 @@ class BookingServiceImplTest {
 
             assertThat(result.getStatus()).isEqualTo(BookingStatus.IN_PROGRESS);
             assertThat(result.getStartedAt()).isNotNull();
+            verify(serviceMapper).toBookingPhoto(any(Booking.class), anyString(), anyString(), anyString(), anyLong());
             verify(bookingRepository).save(any(Booking.class));
             verify(bookingPhotoRepository).saveAll(any());
         }
@@ -800,6 +829,8 @@ class BookingServiceImplTest {
             mockBookingFound(booking);
             mockBookingSaved(booking);
             when(fileStorageService.store(any(), any(), any())).thenReturn("bookings/200/return/return.jpg");
+            when(serviceMapper.toBookingPhoto(any(Booking.class), anyString(), anyString(), anyString(), anyLong()))
+                    .thenReturn(new BookingPhoto());
             when(bookingPhotoRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
 
             CompleteBookingCommand command = BookingFixture.completeCommand();
@@ -807,6 +838,7 @@ class BookingServiceImplTest {
 
             assertThat(result.getStatus()).isEqualTo(BookingStatus.COMPLETED);
             assertThat(result.getCompletedAt()).isNotNull();
+            verify(serviceMapper).toBookingPhoto(any(Booking.class), anyString(), anyString(), anyString(), anyLong());
             verify(bookingRepository).save(any(Booking.class));
             verify(bookingPhotoRepository).saveAll(any());
         }
@@ -954,7 +986,7 @@ class BookingServiceImplTest {
     class SearchVehicles {
 
         @Test
-        @DisplayName("No filters - returns list of available vehicles")
+        @DisplayName("No filters - returns list and passes correct args to mapper")
         void searchVehicles_noFilters_returnsResults() {
             Driver driver = BookingFixture.verifiedDriver();
             mockDriverFound(driver);
@@ -962,18 +994,33 @@ class BookingServiceImplTest {
             Vehicle vehicle = BookingFixture.activeVehicle();
             when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
                     .thenReturn(List.of(vehicle));
-            // maskCoordinate is called because vehicle has non-null lat/lng
             lenient().when(locationMaskService.maskCoordinate(any(double.class)))
                     .thenAnswer(inv -> {
                         double coord = (double) inv.getArgument(0);
                         return Math.round(coord * 100.0) / 100.0;
                     });
+            VehicleSearchResult stubResult = new VehicleSearchResult(vehicle, 45.50, -73.57, "DELIVERY_ONLY", null);
+            when(serviceMapper.toVehicleSearchResult(any(Vehicle.class), any(Double.class), any(Double.class),
+                    any(), any()))
+                    .thenReturn(stubResult);
 
             SearchVehiclesCommand command = BookingFixture.searchVehiclesCommand();
             var results = bookingService.searchAvailableVehicles(command);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getVehicle().getVehicleId()).isEqualTo(BookingFixture.VEHICLE_ID);
+
+            ArgumentCaptor<Vehicle> vehicleCaptor = ArgumentCaptor.forClass(Vehicle.class);
+            ArgumentCaptor<Double> latCaptor = ArgumentCaptor.forClass(Double.class);
+            ArgumentCaptor<Double> lngCaptor = ArgumentCaptor.forClass(Double.class);
+            ArgumentCaptor<String> serviceTypeCaptor = ArgumentCaptor.forClass(String.class);
+
+            verify(serviceMapper).toVehicleSearchResult(
+                    vehicleCaptor.capture(), latCaptor.capture(), lngCaptor.capture(),
+                    serviceTypeCaptor.capture(), any());
+
+            assertThat(vehicleCaptor.getValue().getVehicleId()).isEqualTo(BookingFixture.VEHICLE_ID);
+            assertThat(latCaptor.getValue()).isNotNull();
+            assertThat(lngCaptor.getValue()).isNotNull();
         }
 
         @Test
@@ -1013,7 +1060,7 @@ class BookingServiceImplTest {
         }
 
         @Test
-        @DisplayName("Class 5 driver with TAXI_AND_DELIVERY vehicle - warning is set")
+        @DisplayName("Class 5 driver with TAXI_AND_DELIVERY vehicle - passes DELIVERY_ONLY and warning to mapper")
         void searchVehicles_class5DriverTaxiVehicle_setsWarning() {
             Driver driver = BookingFixture.class5Driver();
             mockDriverFound(driver);
@@ -1024,15 +1071,26 @@ class BookingServiceImplTest {
             when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
                     .thenReturn(List.of(vehicle));
             lenient().when(locationMaskService.maskCoordinate(any(double.class))).thenReturn(45.50);
+            VehicleSearchResult stubResult = new VehicleSearchResult(
+                    vehicle, 45.50, 45.50, "DELIVERY_ONLY", BookingValidationConstraints.WARNING_CLASS5_TAXI);
+            when(serviceMapper.toVehicleSearchResult(any(Vehicle.class), any(Double.class), any(Double.class),
+                    any(), any()))
+                    .thenReturn(stubResult);
 
             SearchVehiclesCommand command = BookingFixture.searchVehiclesCommand();
             command.setDriverId(driver.getUserId());
 
-            var results = bookingService.searchAvailableVehicles(command);
+            bookingService.searchAvailableVehicles(command);
 
-            assertThat(results).hasSize(1);
-            assertThat(results.get(0).getEffectiveServiceType()).isEqualTo("DELIVERY_ONLY");
-            assertThat(results.get(0).getServiceTypeWarning()).isNotNull();
+            ArgumentCaptor<String> effectiveTypeCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> warningCaptor = ArgumentCaptor.forClass(String.class);
+
+            verify(serviceMapper).toVehicleSearchResult(
+                    any(Vehicle.class), any(Double.class), any(Double.class),
+                    effectiveTypeCaptor.capture(), warningCaptor.capture());
+
+            assertThat(effectiveTypeCaptor.getValue()).isEqualTo("DELIVERY_ONLY");
+            assertThat(warningCaptor.getValue()).isEqualTo(BookingValidationConstraints.WARNING_CLASS5_TAXI);
         }
     }
 
@@ -1189,6 +1247,441 @@ class BookingServiceImplTest {
             bookingService.autoCompleteOverdueInProgressBookings();
 
             verify(bookingRepository, never()).saveAll(anyList());
+        }
+    }
+
+    // ── getDriverHoursSummary ─────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getDriverHoursSummary()")
+    class GetDriverHoursSummary {
+
+        @Test
+        @DisplayName("Driver used 8 hours this week - passes correct args to mapper")
+        void getDriverHoursSummary_hoursUsed_returnsCorrectSummary() {
+            int max = BookingValidationConstraints.MAX_SHIFT_HOURS;
+            when(bookingRepository.sumHoursForDriverInWeek(
+                    eq(BookingFixture.DRIVER_ID), anyList(), any(LocalDateTime.class), any(LocalDateTime.class)))
+                    .thenReturn(8);
+            when(serviceMapper.toDriverHoursSummary(eq(8), eq(max), eq(max - 8)))
+                    .thenReturn(new DriverHoursSummary(8, max, max - 8));
+
+            bookingService.getDriverHoursSummary(BookingFixture.DRIVER_ID);
+
+            ArgumentCaptor<Integer> hoursCaptor = ArgumentCaptor.forClass(Integer.class);
+            ArgumentCaptor<Integer> maxCaptor = ArgumentCaptor.forClass(Integer.class);
+            ArgumentCaptor<Integer> remainingCaptor = ArgumentCaptor.forClass(Integer.class);
+
+            verify(serviceMapper).toDriverHoursSummary(
+                    hoursCaptor.capture(), maxCaptor.capture(), remainingCaptor.capture());
+
+            assertThat(hoursCaptor.getValue()).isEqualTo(8);
+            assertThat(maxCaptor.getValue()).isEqualTo(max);
+            assertThat(remainingCaptor.getValue()).isEqualTo(max - 8);
+        }
+
+        @Test
+        @DisplayName("Driver used 0 hours this week - hoursRemaining equals max")
+        void getDriverHoursSummary_noHoursUsed_remainingEqualsMax() {
+            int max = BookingValidationConstraints.MAX_SHIFT_HOURS;
+            when(bookingRepository.sumHoursForDriverInWeek(
+                    eq(BookingFixture.DRIVER_ID), anyList(), any(LocalDateTime.class), any(LocalDateTime.class)))
+                    .thenReturn(0);
+            when(serviceMapper.toDriverHoursSummary(eq(0), eq(max), eq(max)))
+                    .thenReturn(new DriverHoursSummary(0, max, max));
+
+            DriverHoursSummary result = bookingService.getDriverHoursSummary(BookingFixture.DRIVER_ID);
+
+            assertThat(result.getHoursUsedThisWeek()).isZero();
+            assertThat(result.getHoursRemaining()).isEqualTo(max);
+        }
+
+        @Test
+        @DisplayName("Driver used max hours - hoursRemaining is 0, never negative")
+        void getDriverHoursSummary_maxHoursUsed_remainingIsZero() {
+            int max = BookingValidationConstraints.MAX_SHIFT_HOURS;
+            when(bookingRepository.sumHoursForDriverInWeek(
+                    eq(BookingFixture.DRIVER_ID), anyList(), any(LocalDateTime.class), any(LocalDateTime.class)))
+                    .thenReturn(max);
+            when(serviceMapper.toDriverHoursSummary(eq(max), eq(max), eq(0)))
+                    .thenReturn(new DriverHoursSummary(max, max, 0));
+
+            DriverHoursSummary result = bookingService.getDriverHoursSummary(BookingFixture.DRIVER_ID);
+
+            assertThat(result.getHoursRemaining()).isZero();
+        }
+    }
+
+    // ── getOwnerDashboardStats ────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getOwnerDashboardStats()")
+    class GetOwnerDashboardStats {
+
+        @Test
+        @DisplayName("Owner with active vehicles and earnings - returns correct stats")
+        void getOwnerDashboardStats_withData_returnsCorrectStats() {
+            CarOwner owner = BookingFixture.testCarOwner();
+            BigDecimal totalEarnings = new BigDecimal("960.00");
+            BigDecimal monthEarnings = new BigDecimal("120.00");
+
+            when(vehicleRepository.countByOwnerUserIdAndIsActiveTrue(BookingFixture.OWNER_ID)).thenReturn(3L);
+            when(bookingRepository.sumEarningsForOwner(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+                    .thenReturn(totalEarnings);
+            when(bookingRepository.sumEarningsForOwnerInMonth(
+                    eq(BookingFixture.OWNER_ID), eq(BookingStatus.COMPLETED),
+                    any(LocalDateTime.class), any(LocalDateTime.class)))
+                    .thenReturn(monthEarnings);
+            when(bookingRepository.countByVehicleOwnerAndStatus(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+                    .thenReturn(8L);
+            when(carOwnerRepository.findById(BookingFixture.OWNER_ID))
+                    .thenReturn(Optional.of(owner));
+            when(serviceMapper.toOwnerDashboardStats(eq(3), eq(totalEarnings), eq(monthEarnings), eq(8), eq(4.8f)))
+                    .thenReturn(new OwnerDashboardStats(3, totalEarnings, monthEarnings, 8, 4.8f));
+
+            OwnerDashboardStats result = bookingService.getOwnerDashboardStats(BookingFixture.OWNER_ID);
+
+            assertThat(result.getActiveVehicles()).isEqualTo(3);
+            assertThat(result.getTotalEarnings()).isEqualByComparingTo("960.00");
+            assertThat(result.getMonthEarnings()).isEqualByComparingTo("120.00");
+            assertThat(result.getCompletedBookings()).isEqualTo(8);
+            assertThat(result.getRating()).isEqualTo(4.8f);
+            verify(serviceMapper).toOwnerDashboardStats(eq(3), eq(totalEarnings), eq(monthEarnings), eq(8), eq(4.8f));
+        }
+
+        @Test
+        @DisplayName("Owner not found in CarOwnerRepository - rating is null")
+        void getOwnerDashboardStats_ownerNotFound_ratingIsNull() {
+            when(vehicleRepository.countByOwnerUserIdAndIsActiveTrue(BookingFixture.OWNER_ID)).thenReturn(0L);
+            when(bookingRepository.sumEarningsForOwner(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+                    .thenReturn(BigDecimal.ZERO);
+            when(bookingRepository.sumEarningsForOwnerInMonth(
+                    eq(BookingFixture.OWNER_ID), eq(BookingStatus.COMPLETED),
+                    any(LocalDateTime.class), any(LocalDateTime.class)))
+                    .thenReturn(BigDecimal.ZERO);
+            when(bookingRepository.countByVehicleOwnerAndStatus(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+                    .thenReturn(0L);
+            when(carOwnerRepository.findById(BookingFixture.OWNER_ID)).thenReturn(Optional.empty());
+            when(serviceMapper.toOwnerDashboardStats(eq(0), eq(BigDecimal.ZERO), eq(BigDecimal.ZERO), eq(0), eq(null)))
+                    .thenReturn(new OwnerDashboardStats(0, BigDecimal.ZERO, BigDecimal.ZERO, 0, null));
+
+            OwnerDashboardStats result = bookingService.getOwnerDashboardStats(BookingFixture.OWNER_ID);
+
+            assertThat(result.getRating()).isNull();
+            assertThat(result.getActiveVehicles()).isZero();
+            assertThat(result.getCompletedBookings()).isZero();
+        }
+
+        @Test
+        @DisplayName("No completed bookings - totalEarnings and monthEarnings are zero")
+        void getOwnerDashboardStats_noCompletedBookings_earningsAreZero() {
+            CarOwner owner = BookingFixture.testCarOwner();
+            when(vehicleRepository.countByOwnerUserIdAndIsActiveTrue(BookingFixture.OWNER_ID)).thenReturn(2L);
+            when(bookingRepository.sumEarningsForOwner(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+                    .thenReturn(BigDecimal.ZERO);
+            when(bookingRepository.sumEarningsForOwnerInMonth(
+                    eq(BookingFixture.OWNER_ID), eq(BookingStatus.COMPLETED),
+                    any(LocalDateTime.class), any(LocalDateTime.class)))
+                    .thenReturn(BigDecimal.ZERO);
+            when(bookingRepository.countByVehicleOwnerAndStatus(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+                    .thenReturn(0L);
+            when(carOwnerRepository.findById(BookingFixture.OWNER_ID))
+                    .thenReturn(Optional.of(owner));
+            when(serviceMapper.toOwnerDashboardStats(eq(2), eq(BigDecimal.ZERO), eq(BigDecimal.ZERO), eq(0), eq(4.8f)))
+                    .thenReturn(new OwnerDashboardStats(2, BigDecimal.ZERO, BigDecimal.ZERO, 0, 4.8f));
+
+            OwnerDashboardStats result = bookingService.getOwnerDashboardStats(BookingFixture.OWNER_ID);
+
+            assertThat(result.getTotalEarnings()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(result.getMonthEarnings()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(result.getCompletedBookings()).isZero();
+        }
+    }
+
+    // ── getVehicleDetail ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getVehicleDetail()")
+    class GetVehicleDetail {
+
+        @Test
+        @DisplayName("Happy path - passes correct vehicle and driver to mapper")
+        void getVehicleDetail_happyPath_returnsResult() {
+            Driver driver = BookingFixture.verifiedDriver();
+            Vehicle vehicle = BookingFixture.activeVehicle();
+            mockDriverFound(driver);
+            mockVehicleFound(vehicle);
+            lenient().when(locationMaskService.maskCoordinate(any(double.class)))
+                    .thenAnswer(inv -> Math.round((double) inv.getArgument(0) * 100.0) / 100.0);
+            VehicleSearchResult stub = new VehicleSearchResult(vehicle, 45.50, -73.57, "TAXI_AND_DELIVERY", null);
+            when(serviceMapper.toVehicleSearchResult(any(), any(Double.class), any(Double.class), any(), any()))
+                    .thenReturn(stub);
+
+            bookingService.getVehicleDetail(BookingFixture.VEHICLE_ID, BookingFixture.DRIVER_ID);
+
+            ArgumentCaptor<Vehicle> vehicleCaptor = ArgumentCaptor.forClass(Vehicle.class);
+            verify(serviceMapper).toVehicleSearchResult(
+                    vehicleCaptor.capture(), any(Double.class), any(Double.class), any(), any());
+
+            assertThat(vehicleCaptor.getValue().getVehicleId()).isEqualTo(BookingFixture.VEHICLE_ID);
+        }
+
+        @Test
+        @DisplayName("Vehicle not found - throws VEH-004")
+        void getVehicleDetail_vehicleNotFound_throws() {
+            when(vehicleRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> bookingService.getVehicleDetail(999L, BookingFixture.DRIVER_ID))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(VehicleErrorCode.VEHICLE_NOT_FOUND);
+        }
+    }
+
+    // ── getDriverBookings ────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getDriverBookings()")
+    class GetDriverBookings {
+
+        @Test
+        @DisplayName("No status filter - returns all driver bookings")
+        void getDriverBookings_noFilter_returnsAll() {
+            Booking booking = BookingFixture.pendingBooking();
+            when(bookingRepository.findByDriverUserId(BookingFixture.DRIVER_ID))
+                    .thenReturn(List.of(booking));
+
+            var results = bookingService.getDriverBookings(BookingFixture.DRIVER_ID, null);
+
+            assertThat(results).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("With status filter - returns filtered bookings")
+        void getDriverBookings_withStatus_returnsFiltered() {
+            Booking booking = BookingFixture.confirmedBooking();
+            when(bookingRepository.findByDriverUserIdAndStatus(BookingFixture.DRIVER_ID, BookingStatus.CONFIRMED))
+                    .thenReturn(List.of(booking));
+
+            var results = bookingService.getDriverBookings(BookingFixture.DRIVER_ID, "CONFIRMED");
+
+            assertThat(results).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("Blank status filter - treated as no filter")
+        void getDriverBookings_blankStatus_returnsAll() {
+            Booking booking = BookingFixture.pendingBooking();
+            when(bookingRepository.findByDriverUserId(BookingFixture.DRIVER_ID))
+                    .thenReturn(List.of(booking));
+
+            var results = bookingService.getDriverBookings(BookingFixture.DRIVER_ID, "  ");
+
+            assertThat(results).hasSize(1);
+        }
+    }
+
+    // ── getVehicleLocation ───────────────────────────────────────────
+
+    @Nested
+    @DisplayName("getVehicleLocation()")
+    class GetVehicleLocation {
+
+        @Test
+        @DisplayName("Confirmed booking - returns location from mask service")
+        void getVehicleLocation_confirmed_returnsLocation() {
+            Booking booking = BookingFixture.confirmedBooking();
+            mockBookingFound(booking);
+            LocationResult locResult = new LocationResult(BookingFixture.VEHICLE_ID, false, "Downtown", 45.50, -73.57, "Approximate");
+            when(locationMaskService.buildLocationResponse(booking)).thenReturn(locResult);
+
+            GetBookingCommand command = BookingFixture.getBookingCommandForDriver();
+            LocationResult result = bookingService.getVehicleLocation(command);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getVehicleId()).isEqualTo(BookingFixture.VEHICLE_ID);
+            verify(locationMaskService).buildLocationResponse(booking);
+        }
+
+        @Test
+        @DisplayName("PENDING booking - throws BOOK-016")
+        void getVehicleLocation_pending_throws() {
+            Booking booking = BookingFixture.pendingBooking();
+            mockBookingFound(booking);
+
+            assertThatThrownBy(() -> bookingService.getVehicleLocation(BookingFixture.getBookingCommandForDriver()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(BookingErrorCode.ONLY_CONFIRMED_CAN_BE_STARTED);
+        }
+    }
+
+    // ── getBookingById (admin) ───────────────────────────────────────
+
+    @Nested
+    @DisplayName("getBookingById()")
+    class GetBookingById {
+
+        @Test
+        @DisplayName("Booking exists - returns booking")
+        void getBookingById_found_returns() {
+            Booking booking = BookingFixture.pendingBooking();
+            mockBookingFound(booking);
+
+            Booking result = bookingService.getBookingById(BookingFixture.BOOKING_ID);
+
+            assertThat(result).isSameAs(booking);
+        }
+
+        @Test
+        @DisplayName("Booking not found - throws BOOK-011")
+        void getBookingById_notFound_throws() {
+            when(bookingRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> bookingService.getBookingById(999L))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(BookingErrorCode.BOOKING_NOT_FOUND);
+        }
+    }
+
+    // ── searchVehicles — additional coverage ─────────────────────────
+
+    @Nested
+    @DisplayName("searchAvailableVehicles() — additional branches")
+    class SearchVehiclesAdditional {
+
+        @Test
+        @DisplayName("Vehicle with null coordinates - excluded from geo filter")
+        void searchVehicles_nullCoordinates_excluded() {
+            Driver driver = BookingFixture.verifiedDriver();
+            mockDriverFound(driver);
+
+            Vehicle vehicle = BookingFixture.activeVehicle();
+            vehicle.setLatitude(null);
+            vehicle.setLongitude(null);
+            when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
+                    .thenReturn(List.of(vehicle));
+
+            SearchVehiclesCommand command = BookingFixture.searchVehiclesCommand();
+            command.setLatitude(45.0);
+            command.setLongitude(-73.0);
+            command.setRadiusKm(10.0);
+
+            var results = bookingService.searchAvailableVehicles(command);
+
+            assertThat(results).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Vehicle with null serviceType - handled gracefully")
+        void searchVehicles_nullServiceType_handledGracefully() {
+            Driver driver = BookingFixture.verifiedDriver();
+            mockDriverFound(driver);
+
+            Vehicle vehicle = BookingFixture.activeVehicle();
+            vehicle.setServiceType(null);
+            when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
+                    .thenReturn(List.of(vehicle));
+            lenient().when(locationMaskService.maskCoordinate(any(double.class)))
+                    .thenAnswer(inv -> Math.round((double) inv.getArgument(0) * 100.0) / 100.0);
+            VehicleSearchResult stub = new VehicleSearchResult(vehicle, 45.50, -73.57, null, null);
+            when(serviceMapper.toVehicleSearchResult(any(), any(double.class), any(double.class), any(), any()))
+                    .thenReturn(stub);
+
+            var results = bookingService.searchAvailableVehicles(BookingFixture.searchVehiclesCommand());
+
+            assertThat(results).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("Null driver license class - no warning set")
+        void searchVehicles_nullLicenseClass_noWarning() {
+            Driver driver = BookingFixture.verifiedDriver();
+            driver.setLicenseClass(null);
+            mockDriverFound(driver);
+
+            Vehicle vehicle = BookingFixture.activeVehicle();
+            when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
+                    .thenReturn(List.of(vehicle));
+            lenient().when(locationMaskService.maskCoordinate(any(double.class)))
+                    .thenAnswer(inv -> Math.round((double) inv.getArgument(0) * 100.0) / 100.0);
+            VehicleSearchResult stub = new VehicleSearchResult(vehicle, 45.50, -73.57, "TAXI_AND_DELIVERY", null);
+            when(serviceMapper.toVehicleSearchResult(any(), any(double.class), any(double.class), any(), any()))
+                    .thenReturn(stub);
+
+            var results = bookingService.searchAvailableVehicles(BookingFixture.searchVehiclesCommand());
+
+            assertThat(results).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("Non-Class5 driver with DELIVERY_ONLY vehicle - warning set")
+        void searchVehicles_class4DeliveryOnly_setsWarning() {
+            Driver driver = BookingFixture.verifiedDriver(); // CLASS_4
+            mockDriverFound(driver);
+
+            Vehicle vehicle = BookingFixture.activeVehicle();
+            vehicle.setServiceType(ServiceType.DELIVERY_ONLY);
+            when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
+                    .thenReturn(List.of(vehicle));
+            lenient().when(locationMaskService.maskCoordinate(any(double.class)))
+                    .thenAnswer(inv -> Math.round((double) inv.getArgument(0) * 100.0) / 100.0);
+            VehicleSearchResult stub = new VehicleSearchResult(vehicle, 45.50, -73.57, "DELIVERY_ONLY",
+                    BookingValidationConstraints.WARNING_CLASS4_DELIVERY_ONLY);
+            when(serviceMapper.toVehicleSearchResult(any(), any(double.class), any(double.class),
+                    eq("DELIVERY_ONLY"), eq(BookingValidationConstraints.WARNING_CLASS4_DELIVERY_ONLY)))
+                    .thenReturn(stub);
+
+            var results = bookingService.searchAvailableVehicles(BookingFixture.searchVehiclesCommand());
+
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).getServiceTypeWarning())
+                    .isEqualTo(BookingValidationConstraints.WARNING_CLASS4_DELIVERY_ONLY);
+        }
+
+        @Test
+        @DisplayName("EndTime exceeds vehicle availableUntil - vehicle excluded")
+        void searchVehicles_endTimeExceedsAvailableUntil_excluded() {
+            Driver driver = BookingFixture.verifiedDriver();
+            mockDriverFound(driver);
+
+            Vehicle vehicle = BookingFixture.activeVehicle();
+            vehicle.setAvailableUntil(LocalDateTime.now().plusHours(2));
+            when(vehicleRepository.searchAvailableVehicles(any(), any(), any(), any(), any(), any()))
+                    .thenReturn(List.of(vehicle));
+
+            SearchVehiclesCommand command = BookingFixture.searchVehiclesCommand();
+            command.setEndTime(LocalDateTime.now().plusDays(5));
+
+            var results = bookingService.searchAvailableVehicles(command);
+
+            assertThat(results).isEmpty();
+        }
+    }
+
+    // ── findDriverById ───────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("findDriverById() — BOOK-024")
+    class FindDriverById {
+
+        @Test
+        @DisplayName("Driver not found - throws DRIVER_NOT_FOUND")
+        void findDriverById_notFound_throwsBook024() {
+            when(driverRepository.findById(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> bookingService.searchAvailableVehicles(
+                    buildSearchCommandForDriver(999L)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                    .isEqualTo(BookingErrorCode.DRIVER_NOT_FOUND);
+        }
+
+        private SearchVehiclesCommand buildSearchCommandForDriver(Long driverId) {
+            SearchVehiclesCommand cmd = new SearchVehiclesCommand();
+            cmd.setDriverId(driverId);
+            return cmd;
         }
     }
 }

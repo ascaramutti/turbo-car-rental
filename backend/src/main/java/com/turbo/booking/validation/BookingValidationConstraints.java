@@ -93,4 +93,27 @@ public final class BookingValidationConstraints {
     /** Warning shown when a CLASS_4 driver books a DELIVERY_ONLY vehicle. */
     public static final String WARNING_CLASS4_DELIVERY_ONLY =
             "This vehicle is classified for delivery services only";
+
+    // ── License class identifiers ───────────────────────────────────
+
+    /** License class identifier for Class 5 (restricted to delivery only for TAXI_AND_DELIVERY vehicles). */
+    public static final String LICENSE_CLASS_5 = "CLASS_5";
+
+    // ── Location messages ───────────────────────────────────────────
+
+    /** Message shown when exact pickup location is not yet available. */
+    public static final String LOCATION_MESSAGE_NOT_YET_AVAILABLE =
+            "Exact location will be available 2 hours before your booking";
+
+    /** Message shown when exact pickup location is now available. */
+    public static final String LOCATION_MESSAGE_NOW_AVAILABLE =
+            "Exact pickup location is now available";
+
+    // ── Filename sanitization ───────────────────────────────────────
+
+    /** Regex pattern that matches characters NOT allowed in stored filenames. */
+    public static final String UNSAFE_FILENAME_CHARS = "[^a-zA-Z0-9._-]";
+
+    /** Maximum length for stored filenames. */
+    public static final int MAX_FILENAME_LENGTH = 255;
 }
