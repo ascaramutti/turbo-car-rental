@@ -16,6 +16,8 @@ import {
 export default function VehicleCard({ vehicle, onClick }) {
   const statusConfig = STATUS_CONFIG[vehicle.status];
   const categoryLabel = CATEGORY_LABELS[vehicle.category] || vehicle.category;
+  const isExpired = vehicle.isActive && vehicle.availableUntil && new Date(vehicle.availableUntil) < new Date();
+  const isEffectivelyActive = vehicle.isActive && !isExpired;
 
   return (
     <button
@@ -50,7 +52,7 @@ export default function VehicleCard({ vehicle, onClick }) {
           <Car size={14} />
           {categoryLabel}
         </span>
-        {vehicle.isActive && vehicle.hourlyRate != null && (
+        {isEffectivelyActive && vehicle.hourlyRate != null && (
           <span className="inline-flex items-center gap-1">
             <DollarSign size={14} />
             ${Number(vehicle.hourlyRate).toFixed(2)}/hr

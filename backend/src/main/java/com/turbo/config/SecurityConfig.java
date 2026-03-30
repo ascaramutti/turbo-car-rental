@@ -23,6 +23,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private static final String AUTH_ENDPOINTS = "/api/auth/**";
+    private static final String BOOKING_PHOTOS_ENDPOINTS = "/api/bookings/photos/**";
     private static final String DRIVER_ENDPOINTS = "/api/driver/**";
     private static final String OWNER_ENDPOINTS = "/api/owner/**";
     private static final String ADMIN_ENDPOINTS = "/api/admin/**";
@@ -38,6 +39,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(AUTH_ENDPOINTS).permitAll()
+                .requestMatchers(BOOKING_PHOTOS_ENDPOINTS).authenticated()
                 .requestMatchers(DRIVER_ENDPOINTS).hasAuthority(UserRole.DRIVER.name())
                 .requestMatchers(OWNER_ENDPOINTS).hasAuthority(UserRole.CAR_OWNER.name())
                 .requestMatchers(ADMIN_ENDPOINTS).hasAuthority(UserRole.ADMIN.name())

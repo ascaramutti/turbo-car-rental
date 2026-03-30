@@ -60,7 +60,7 @@ const ACTIVE_VEHICLE = {
   ...APPROVED_VEHICLE,
   hourlyRate: 25.0,
   isActive: true,
-  availableUntil: '2026-03-20T17:00:00',
+  availableUntil: '2099-12-31T23:59:00',
 };
 
 describe('VehicleDetailPage', () => {

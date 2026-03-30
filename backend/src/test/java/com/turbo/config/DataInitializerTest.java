@@ -1,10 +1,13 @@
 package com.turbo.config;
 
+import com.turbo.booking.repository.BookingRepository;
 import com.turbo.user.model.Admin;
 import com.turbo.user.model.CarOwner;
 import com.turbo.user.model.Driver;
 import com.turbo.user.model.User;
+import com.turbo.user.repository.DriverRepository;
 import com.turbo.user.repository.UserRepository;
+import com.turbo.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,16 +26,27 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+import org.junit.jupiter.api.BeforeEach;
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DataInitializer")
 class DataInitializerTest {
 
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private VehicleRepository vehicleRepository;
+    @Mock private DriverRepository driverRepository;
+    @Mock private BookingRepository bookingRepository;
 
     @InjectMocks private DataInitializer dataInitializer;
 
     @Captor private ArgumentCaptor<User> userCaptor;
+
+    @BeforeEach
+    void setUp() {
+        // Prevent seedSampleBookings from trying to seed data in every test
+        lenient().when(bookingRepository.count()).thenReturn(1L);
+    }
 
     // ── Happy path ──────────────────────────────────────────────────────
 

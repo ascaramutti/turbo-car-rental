@@ -94,3 +94,23 @@ All other fields (make, model, year, category, fuel type) should be read-only si
 **Why deferred:** The current single-window approach works for MVP. A slot system requires a new `VehicleSlot` entity, dedicated endpoints (CRUD for slots), calendar UI components, and conflict validation logic. This is a significant feature that should be designed as its own module or sub-module.
 
 **Impact:** Backend (new entity, repository, service, controller) + Frontend (calendar UI, slot management page).
+
+---
+
+## 7. Path Traversal Vulnerability in FileStorageServiceImpl (SECURITY — Technical Debt)
+
+**Current state:** `FileStorageServiceImpl.load(String filePath)` in `com.turbo.document.service.impl` accepts arbitrary file paths without validating that the resolved path stays within the configured `uploadDir`. An attacker could craft a request with `../../etc/passwd` to read files outside the uploads directory.
+
+**Fix needed:** Add path bounds validation before loading:
+```java
+Path resolved = Paths.get(uploadDir).resolve(filePath).normalize();
+if (!resolved.startsWith(Paths.get(uploadDir).normalize())) {
+    throw new BusinessException(DocumentErrorCode.INVALID_FILE_FORMAT);
+}
+```
+
+**Why deferred:** Discovered during Module 4 security audit (Gemini review). The vulnerable code belongs to Module 2 (`document` package). Fixing it in the Module 4 branch could break existing document functionality. Should be addressed in a dedicated security fix PR.
+
+**Impact:** Backend only — `FileStorageServiceImpl.java`. Low risk in dev (Docker-only deploys), higher risk if deployed to production.
+
+**Priority:** HIGH — fix before any production deployment.

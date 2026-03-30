@@ -47,6 +47,9 @@ public class FileStorageServiceImpl implements FileStorageService {
         String uniqueFileName = buildUniqueFileName(file.getOriginalFilename(), documentType);
         Path targetPath = userDir.resolve(uniqueFileName);
 
+        // Create parent directories if the filename contains path separators (e.g. booking photos)
+        createDirectoryIfNotExists(targetPath.getParent());
+
         copyFile(file, targetPath);
         return targetPath.toString();
     }
