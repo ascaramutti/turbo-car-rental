@@ -1,6 +1,6 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../modules/auth/context/useAuth';
-import { LogOut, Menu, X, Clock, Search, Calendar } from 'lucide-react';
+import { LogOut, Menu, X, Clock, Search, Calendar, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { USER_ROLES } from '../../constants/roles';
 import { getDriverHoursSummary } from '../../../modules/booking/api/bookingApi';
@@ -105,6 +105,17 @@ export default function Navbar() {
                       <Calendar size={14} />
                       My Bookings
                     </NavLink>
+                    <NavLink
+                      to="/driver/reviews"
+                      className={({ isActive }) =>
+                        `flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-full transition-colors ${
+                          isActive ? 'bg-accent-orange text-white' : 'text-text-gray hover:text-text-dark'
+                        }`
+                      }
+                    >
+                      <Star size={14} />
+                      My Reviews
+                    </NavLink>
                   </div>
                 )}
                 {isDriver && <DriverHoursBadge />}
@@ -172,6 +183,13 @@ export default function Navbar() {
                       className="block px-2 py-2 text-sm text-text-dark hover:bg-gray-100 rounded"
                     >
                       My Bookings
+                    </Link>
+                    <Link
+                      to="/driver/reviews"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-2 py-2 text-sm text-text-dark hover:bg-gray-100 rounded"
+                    >
+                      My Reviews
                     </Link>
                     <div className="px-2">
                       <DriverHoursBadge />

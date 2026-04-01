@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, MapPin, X, CreditCard } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPin, X, CreditCard, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getDriverBookingDetail,
@@ -17,6 +17,9 @@ import PhotoUpload from '../components/PhotoUpload';
 import LocationDisplay from '../components/LocationDisplay';
 import AuthImage from '../components/AuthImage';
 import PaymentModal from '../components/PaymentModal';
+import ReviewModal from '../../reviews/components/ReviewModal';
+import ReviewCard from '../../reviews/components/ReviewCard';
+import { getBookingReviews } from '../../reviews/api/reviewApi';
 import { BOOKING_STATUS, MAX_REASON_LENGTH, PAYMENT_STATUS, PAYMENT_STATUS_CONFIG } from '../constants/bookingConstants';
 import { SERVICE_TYPE_LABELS, CATEGORY_LABELS } from '../../vehicles/constants/vehicleConstants';
 import { formatDateTime } from '../../../shared/utils/dateUtils';
@@ -50,6 +53,10 @@ export default function DriverBookingDetailPage() {
   const [payment, setPayment] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
+  // Review state
+  const [bookingReviews, setBookingReviews] = useState([]);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+
   // Photo upload state (arrays for multi-photo)
   const [showStartForm, setShowStartForm] = useState(false);
   const [showCompleteForm, setShowCompleteForm] = useState(false);
@@ -80,6 +87,14 @@ export default function DriverBookingDetailPage() {
           setPayment(pay);
         } catch {
           // Payment may not exist yet — non-critical
+        }
+        if (data.status === BOOKING_STATUS.COMPLETED) {
+          try {
+            const { data: revs } = await getBookingReviews(id);
+            setBookingReviews(revs);
+          } catch {
+            // Reviews fetch failure is non-critical
+          }
         }
       }
     } catch (err) {
@@ -167,6 +182,7 @@ export default function DriverBookingDetailPage() {
   if (!booking) return null;
 
   const isTerminal = [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status);
+  const hasDriverReviewed = bookingReviews.some(r => r.reviewType === 'DRIVER_TO_OWNER');
 
   return (
     <div className="flex-1 bg-bg-light px-4 py-8">
@@ -479,6 +495,36 @@ export default function DriverBookingDetailPage() {
           </section>
         )}
         {/* Payment Modal */}
+        {/* Reviews section (COMPLETED bookings) */}
+        {booking.status === BOOKING_STATUS.COMPLETED && bookingReviews.length > 0 && (
+          <section className="bg-white border-2 border-gray-200 rounded-xl p-6">
+            <h2 className="text-base font-bold text-text-dark mb-3 flex items-center gap-2">
+              <Star size={16} />
+              Reviews
+            </h2>
+            <div className="space-y-3">
+              {bookingReviews.map((review) => (
+                <ReviewCard key={review.reviewId} review={review} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Leave Review (COMPLETED bookings only) */}
+        {booking.status === BOOKING_STATUS.COMPLETED && !hasDriverReviewed && (
+          <section className="bg-white border-2 border-gray-200 rounded-xl p-6">
+            <button
+              type="button"
+              onClick={() => setShowReviewModal(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-turbo-yellow text-text-dark text-sm font-bold rounded-full hover:opacity-90 transition-opacity"
+            >
+              <Star size={16} />
+              Leave a Review
+            </button>
+          </section>
+        )}
+
+        {/* Payment Modal */}
         {showPaymentModal && (
           <PaymentModal
             bookingId={booking.bookingId}
@@ -488,6 +534,18 @@ export default function DriverBookingDetailPage() {
               fetchBooking();
             }}
             onClose={() => setShowPaymentModal(false)}
+          />
+        )}
+
+        {/* Review Modal */}
+        {showReviewModal && (
+          <ReviewModal
+            bookingId={booking.bookingId}
+            onSuccess={() => {
+              setShowReviewModal(false);
+              fetchBooking();
+            }}
+            onClose={() => setShowReviewModal(false)}
           />
         )}
       </div>

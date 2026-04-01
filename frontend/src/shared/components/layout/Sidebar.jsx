@@ -8,7 +8,7 @@ const OWNER_NAV_ITEMS = [
   { to: '/owner/vehicles', icon: Car, label: 'My Vehicles', disabled: false },
   { to: '/owner/bookings', icon: Calendar, label: 'Bookings', disabled: false },
   { to: '/owner/earnings', icon: DollarSign, label: 'Earnings', disabled: false },
-  { to: '/owner/reviews', icon: Star, label: 'Reviews', disabled: true, tooltip: 'Coming soon' },
+  { to: '/owner/reviews', icon: Star, label: 'Reviews', disabled: false },
 ];
 
 /** Admin sidebar navigation link definitions. */

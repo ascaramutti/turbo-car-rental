@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CheckCircle, XCircle, X } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle, XCircle, X, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getOwnerBookingDetail,
@@ -13,6 +13,9 @@ import { validateBookingField } from '../utils/bookingValidation';
 import AuthImage from '../components/AuthImage';
 import BookingStatusBadge from '../components/BookingStatusBadge';
 import { BOOKING_STATUS, MAX_REASON_LENGTH } from '../constants/bookingConstants';
+import ReviewModal from '../../reviews/components/ReviewModal';
+import ReviewCard from '../../reviews/components/ReviewCard';
+import { getBookingReviews } from '../../reviews/api/reviewApi';
 import { SERVICE_TYPE_LABELS, CATEGORY_LABELS } from '../../vehicles/constants/vehicleConstants';
 import { formatDateTime } from '../../../shared/utils/dateUtils';
 
@@ -41,6 +44,10 @@ export default function OwnerBookingDetailPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectReasonError, setRejectReasonError] = useState(null);
 
+  // Review state
+  const [bookingReviews, setBookingReviews] = useState([]);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+
   // Cancel form state
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -51,6 +58,14 @@ export default function OwnerBookingDetailPage() {
     try {
       const { data } = await getOwnerBookingDetail(id);
       setBooking(data);
+      if (data.status === BOOKING_STATUS.COMPLETED) {
+        try {
+          const { data: revs } = await getBookingReviews(id);
+          setBookingReviews(revs);
+        } catch {
+          // Non-critical
+        }
+      }
     } catch (err) {
       toast.error(extractErrorMessage(err));
       navigate('/owner/bookings');
@@ -130,6 +145,7 @@ export default function OwnerBookingDetailPage() {
   if (!booking) return null;
 
   const isTerminal = [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status);
+  const hasOwnerReviewed = bookingReviews.some(r => r.reviewType === 'OWNER_TO_DRIVER');
 
   return (
     <div className="flex-1 bg-bg-light px-4 py-8">
@@ -390,6 +406,46 @@ export default function OwnerBookingDetailPage() {
               </>
             )}
           </section>
+        )}
+        {/* Reviews section (COMPLETED bookings) */}
+        {booking.status === BOOKING_STATUS.COMPLETED && bookingReviews.length > 0 && (
+          <section className="bg-white border-2 border-gray-200 rounded-xl p-6">
+            <h2 className="text-base font-bold text-text-dark mb-3 flex items-center gap-2">
+              <Star size={16} />
+              Reviews
+            </h2>
+            <div className="space-y-3">
+              {bookingReviews.map((review) => (
+                <ReviewCard key={review.reviewId} review={review} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Leave Review (COMPLETED, not yet reviewed by owner) */}
+        {booking.status === BOOKING_STATUS.COMPLETED && !hasOwnerReviewed && (
+          <section className="bg-white border-2 border-gray-200 rounded-xl p-6">
+            <button
+              type="button"
+              onClick={() => setShowReviewModal(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-turbo-yellow text-text-dark text-sm font-bold rounded-full hover:opacity-90 transition-opacity"
+            >
+              <Star size={16} />
+              Leave a Review
+            </button>
+          </section>
+        )}
+
+        {/* Review Modal */}
+        {showReviewModal && (
+          <ReviewModal
+            bookingId={booking.bookingId}
+            onSuccess={() => {
+              setShowReviewModal(false);
+              fetchBooking();
+            }}
+            onClose={() => setShowReviewModal(false)}
+          />
         )}
       </div>
     </div>

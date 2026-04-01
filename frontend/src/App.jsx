@@ -25,6 +25,7 @@ import OwnerBookingDetailPage from './modules/booking/pages/OwnerBookingDetailPa
 import OwnerEarningsPage from './modules/booking/pages/OwnerEarningsPage';
 import AdminBookingsPage from './modules/booking/pages/AdminBookingsPage';
 import AdminBookingDetailPage from './modules/booking/pages/AdminBookingDetailPage';
+import MyReviewsPage from './modules/reviews/pages/MyReviewsPage';
 
 /**
  * Returns the default authenticated landing path based on the user's role.
@@ -114,6 +115,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/driver/reviews"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.DRIVER]}>
+                <MyReviewsPage />
+              </ProtectedRoute>
+            }
+          />
           {/* Legacy dashboard path — redirect to search */}
           <Route
             path="/driver/dashboard"
@@ -182,6 +191,17 @@ export default function App() {
               <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
                 <DashboardLayout>
                   <OwnerEarningsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/owner/reviews"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
+                <DashboardLayout>
+                  <MyReviewsPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }
