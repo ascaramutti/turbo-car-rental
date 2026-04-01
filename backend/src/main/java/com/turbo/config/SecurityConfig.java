@@ -23,10 +23,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private static final String AUTH_ENDPOINTS = "/api/auth/**";
+    private static final String BOOKING_PAYMENTS_ENDPOINT = "/api/bookings/*/payments";
     private static final String BOOKING_PHOTOS_ENDPOINTS = "/api/bookings/photos/**";
     private static final String DRIVER_ENDPOINTS = "/api/driver/**";
     private static final String OWNER_ENDPOINTS = "/api/owner/**";
     private static final String ADMIN_ENDPOINTS = "/api/admin/**";
+    private static final String STRIPE_WEBHOOK_ENDPOINT = "/api/stripe/webhook";
 
     private final JwtAuthFilter jwtAuthFilter;
 
@@ -39,6 +41,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(AUTH_ENDPOINTS).permitAll()
+                .requestMatchers(STRIPE_WEBHOOK_ENDPOINT).permitAll()
+                .requestMatchers(BOOKING_PAYMENTS_ENDPOINT).hasAnyAuthority(UserRole.DRIVER.name(), UserRole.CAR_OWNER.name())
                 .requestMatchers(BOOKING_PHOTOS_ENDPOINTS).authenticated()
                 .requestMatchers(DRIVER_ENDPOINTS).hasAuthority(UserRole.DRIVER.name())
                 .requestMatchers(OWNER_ENDPOINTS).hasAuthority(UserRole.CAR_OWNER.name())

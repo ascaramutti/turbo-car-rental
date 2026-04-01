@@ -23,6 +23,8 @@ import com.turbo.booking.service.command.StartBookingCommand;
 import com.turbo.booking.validation.BookingValidationConstraints;
 import com.turbo.document.service.FileStorageService;
 import com.turbo.exception.BusinessException;
+import com.turbo.payment.repository.PaymentRepository;
+import com.turbo.payment.service.PaymentService;
 import com.turbo.exception.error.BookingErrorCode;
 import com.turbo.exception.error.DocumentErrorCode;
 import com.turbo.exception.error.VehicleErrorCode;
@@ -65,9 +67,11 @@ public class BookingServiceImpl implements BookingService {
     private final VehicleRepository vehicleRepository;
     private final DriverRepository driverRepository;
     private final CarOwnerRepository carOwnerRepository;
+    private final PaymentRepository paymentRepository;
     private final FileStorageService fileStorageService;
     private final LocationMaskService locationMaskService;
     private final BookingServiceMapper serviceMapper;
+    private final PaymentService paymentService;
 
     // ── Driver: dashboard ────────────────────────────────────────────
 
@@ -87,12 +91,14 @@ public class BookingServiceImpl implements BookingService {
     @Override
     public OwnerDashboardStats getOwnerDashboardStats(Long ownerId) {
         long activeVehicles = vehicleRepository.countByOwnerUserIdAndIsActiveTrue(ownerId);
-        BigDecimal totalEarnings = bookingRepository.sumEarningsForOwner(ownerId, BookingStatus.COMPLETED);
+        BigDecimal totalEarnings = paymentRepository.sumOwnerPayoutByStatus(
+                ownerId, com.turbo.payment.model.enums.PaymentStatus.COMPLETED);
         LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
         LocalDateTime monthEnd = monthStart.plusMonths(1);
-        BigDecimal monthEarnings = bookingRepository.sumEarningsForOwnerInMonth(
-                ownerId, BookingStatus.COMPLETED, monthStart, monthEnd);
-        long completedCount = bookingRepository.countByVehicleOwnerAndStatus(ownerId, BookingStatus.COMPLETED);
+        BigDecimal monthEarnings = paymentRepository.sumOwnerPayoutInRange(
+                ownerId, monthStart, monthEnd);
+        long completedCount = paymentRepository.countByOwnerAndStatus(
+                ownerId, com.turbo.payment.model.enums.PaymentStatus.COMPLETED);
         Float rating = carOwnerRepository.findById(ownerId)
                 .map(CarOwner::getRating)
                 .orElse(null);
@@ -181,7 +187,9 @@ public class BookingServiceImpl implements BookingService {
 
         String cancelledBy = resolveCancelledByFromRole(command.getUserRole());
         applyCancellation(booking, command.getReason(), cancelledBy);
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        paymentService.refundPaymentForCancelledBooking(saved);
+        return saved;
     }
 
     @Override

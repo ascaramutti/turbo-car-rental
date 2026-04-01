@@ -126,6 +126,56 @@ export const BOOKING_ERROR_MESSAGES = {
   'BOOK-026': 'Photo upload limit exceeded. Maximum 10 photos allowed per upload',
 };
 
+/** Payment status enum values matching PaymentStatus on the backend. */
+export const PAYMENT_STATUS = {
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  REFUNDED: 'REFUNDED',
+};
+
+/** UI styling configuration for each payment status. */
+export const PAYMENT_STATUS_CONFIG = {
+  [PAYMENT_STATUS.PENDING]: {
+    label: 'Payment Pending',
+    color: 'text-amber-600',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+  },
+  [PAYMENT_STATUS.COMPLETED]: {
+    label: 'Paid',
+    color: 'text-green-600',
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+  },
+  [PAYMENT_STATUS.FAILED]: {
+    label: 'Payment Failed',
+    color: 'text-red-500',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+  },
+  [PAYMENT_STATUS.REFUNDED]: {
+    label: 'Refunded',
+    color: 'text-gray-500',
+    bg: 'bg-gray-50',
+    border: 'border-gray-200',
+  },
+};
+
+/** User-facing error messages for PAY-XXX error codes. */
+export const PAYMENT_ERROR_MESSAGES = {
+  'PAY-001': 'Booking not found',
+  'PAY-002': 'You do not have permission to access this payment',
+  'PAY-003': 'Only confirmed bookings can be paid',
+  'PAY-004': 'Payment processing is not configured',
+  'PAY-005': 'Payment has already been completed for this booking',
+  'PAY-006': 'Failed to create payment intent',
+  'PAY-007': 'Payment record not found for this booking',
+  'PAY-008': 'Invalid webhook signature',
+  'PAY-009': 'Failed to process payment webhook event',
+  'PAY-010': 'Failed to process payment refund',
+};
+
 /** Accepted photo file formats for pickup/return photos. */
 export const ACCEPTED_PHOTO_FORMATS = '.jpg,.jpeg,.png';
 

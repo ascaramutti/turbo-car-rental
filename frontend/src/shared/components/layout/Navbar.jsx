@@ -28,8 +28,8 @@ function DriverHoursBadge() {
 
   if (hours == null) return null;
 
-  const used = Number(hours.hoursUsed ?? 0);
-  const limit = Number(hours.weeklyLimit ?? 24);
+  const used = Number(hours.hoursUsedThisWeek ?? 0);
+  const limit = Number(hours.maxHoursPerWeek ?? 24);
   const pct = Math.min((used / limit) * 100, 100);
   const isLow = limit - used <= 4;
 

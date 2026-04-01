@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, MapPin, X } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPin, X, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getDriverBookingDetail,
@@ -9,13 +9,15 @@ import {
   completeBooking,
   getVehicleLocation,
 } from '../api/bookingApi';
+import { getBookingPayment } from '../api/bookingPaymentApi';
 import { extractErrorMessage } from '../../auth/utils/validation';
 import { validateBookingField } from '../utils/bookingValidation';
 import BookingStatusBadge from '../components/BookingStatusBadge';
 import PhotoUpload from '../components/PhotoUpload';
 import LocationDisplay from '../components/LocationDisplay';
 import AuthImage from '../components/AuthImage';
-import { BOOKING_STATUS, MAX_REASON_LENGTH } from '../constants/bookingConstants';
+import PaymentModal from '../components/PaymentModal';
+import { BOOKING_STATUS, MAX_REASON_LENGTH, PAYMENT_STATUS, PAYMENT_STATUS_CONFIG } from '../constants/bookingConstants';
 import { SERVICE_TYPE_LABELS, CATEGORY_LABELS } from '../../vehicles/constants/vehicleConstants';
 import { formatDateTime } from '../../../shared/utils/dateUtils';
 
@@ -44,6 +46,10 @@ export default function DriverBookingDetailPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonError, setCancelReasonError] = useState(null);
 
+  // Payment state
+  const [payment, setPayment] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
   // Photo upload state (arrays for multi-photo)
   const [showStartForm, setShowStartForm] = useState(false);
   const [showCompleteForm, setShowCompleteForm] = useState(false);
@@ -68,6 +74,12 @@ export default function DriverBookingDetailPage() {
           setLocation(loc);
         } catch {
           // Location fetch failure is non-critical
+        }
+        try {
+          const { data: pay } = await getBookingPayment(id);
+          setPayment(pay);
+        } catch {
+          // Payment may not exist yet — non-critical
         }
       }
     } catch (err) {
@@ -256,6 +268,21 @@ export default function DriverBookingDetailPage() {
             </div>
           )}
 
+          {/* Payment info */}
+          {payment && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-semibold text-text-gray uppercase tracking-wide mb-2">
+                Payment
+              </p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <InfoItem label="Status" value={PAYMENT_STATUS_CONFIG[payment.status]?.label || payment.status} />
+                <InfoItem label="Amount" value={`$${Number(payment.amount).toFixed(2)} ${payment.currency?.toUpperCase()}`} />
+                <InfoItem label="Security Deposit" value={`$${Number(payment.securityDeposit).toFixed(2)}`} />
+                <InfoItem label="Platform Fee" value={`$${Number(payment.platformFee).toFixed(2)}`} />
+              </div>
+            </div>
+          )}
+
           {/* Cancellation / rejection reason */}
           {booking.cancellationReason && (
             <div className="mt-4 pt-4 border-t border-gray-100">
@@ -289,6 +316,16 @@ export default function DriverBookingDetailPage() {
             {/* Action buttons row */}
             {!showStartForm && !showCompleteForm && !showCancelForm && (
               <div className="flex items-center gap-3">
+                {booking.status === BOOKING_STATUS.CONFIRMED && (!payment || payment.status === 'PENDING') && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentModal(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-driver-blue text-white text-sm font-bold rounded-full hover:bg-driver-blue-light transition-colors"
+                  >
+                    <CreditCard size={16} />
+                    Pay Now
+                  </button>
+                )}
                 {booking.status === BOOKING_STATUS.CONFIRMED && (
                   <button
                     type="button"
@@ -440,6 +477,18 @@ export default function DriverBookingDetailPage() {
               </div>
             )}
           </section>
+        )}
+        {/* Payment Modal */}
+        {showPaymentModal && (
+          <PaymentModal
+            bookingId={booking.bookingId}
+            onSuccess={() => {
+              setShowPaymentModal(false);
+              toast.success('Payment completed successfully!');
+              fetchBooking();
+            }}
+            onClose={() => setShowPaymentModal(false)}
+          />
         )}
       </div>
     </div>

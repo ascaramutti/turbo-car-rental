@@ -123,7 +123,7 @@ export default function OwnerDashboardPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {['Driver', 'Vehicle', 'Date & Time', 'Duration', 'Earnings', 'Status'].map((col) => (
+                    {['Driver', 'Vehicle', 'Date & Time', 'Duration', 'Price', 'Status'].map((col) => (
                       <th
                         key={col}
                         className="px-4 py-3 text-left text-xs font-bold text-text-gray uppercase tracking-wide"

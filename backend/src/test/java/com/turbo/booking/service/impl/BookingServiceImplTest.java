@@ -74,6 +74,8 @@ class BookingServiceImplTest {
     @Mock private FileStorageService fileStorageService;
     @Mock private LocationMaskService locationMaskService;
     @Mock private BookingServiceMapper serviceMapper;
+    @Mock private com.turbo.payment.service.PaymentService paymentService;
+    @Mock private com.turbo.payment.repository.PaymentRepository paymentRepository;
 
     @InjectMocks private BookingServiceImpl bookingService;
 
@@ -1326,13 +1328,13 @@ class BookingServiceImplTest {
             BigDecimal monthEarnings = new BigDecimal("120.00");
 
             when(vehicleRepository.countByOwnerUserIdAndIsActiveTrue(BookingFixture.OWNER_ID)).thenReturn(3L);
-            when(bookingRepository.sumEarningsForOwner(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+            when(paymentRepository.sumOwnerPayoutByStatus(BookingFixture.OWNER_ID, com.turbo.payment.model.enums.PaymentStatus.COMPLETED))
                     .thenReturn(totalEarnings);
-            when(bookingRepository.sumEarningsForOwnerInMonth(
-                    eq(BookingFixture.OWNER_ID), eq(BookingStatus.COMPLETED),
+            when(paymentRepository.sumOwnerPayoutInRange(
+                    eq(BookingFixture.OWNER_ID),
                     any(LocalDateTime.class), any(LocalDateTime.class)))
                     .thenReturn(monthEarnings);
-            when(bookingRepository.countByVehicleOwnerAndStatus(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+            when(paymentRepository.countByOwnerAndStatus(BookingFixture.OWNER_ID, com.turbo.payment.model.enums.PaymentStatus.COMPLETED))
                     .thenReturn(8L);
             when(carOwnerRepository.findById(BookingFixture.OWNER_ID))
                     .thenReturn(Optional.of(owner));
@@ -1353,13 +1355,13 @@ class BookingServiceImplTest {
         @DisplayName("Owner not found in CarOwnerRepository - rating is null")
         void getOwnerDashboardStats_ownerNotFound_ratingIsNull() {
             when(vehicleRepository.countByOwnerUserIdAndIsActiveTrue(BookingFixture.OWNER_ID)).thenReturn(0L);
-            when(bookingRepository.sumEarningsForOwner(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+            when(paymentRepository.sumOwnerPayoutByStatus(BookingFixture.OWNER_ID, com.turbo.payment.model.enums.PaymentStatus.COMPLETED))
                     .thenReturn(BigDecimal.ZERO);
-            when(bookingRepository.sumEarningsForOwnerInMonth(
-                    eq(BookingFixture.OWNER_ID), eq(BookingStatus.COMPLETED),
+            when(paymentRepository.sumOwnerPayoutInRange(
+                    eq(BookingFixture.OWNER_ID),
                     any(LocalDateTime.class), any(LocalDateTime.class)))
                     .thenReturn(BigDecimal.ZERO);
-            when(bookingRepository.countByVehicleOwnerAndStatus(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+            when(paymentRepository.countByOwnerAndStatus(BookingFixture.OWNER_ID, com.turbo.payment.model.enums.PaymentStatus.COMPLETED))
                     .thenReturn(0L);
             when(carOwnerRepository.findById(BookingFixture.OWNER_ID)).thenReturn(Optional.empty());
             when(serviceMapper.toOwnerDashboardStats(eq(0), eq(BigDecimal.ZERO), eq(BigDecimal.ZERO), eq(0), eq(null)))
@@ -1377,13 +1379,13 @@ class BookingServiceImplTest {
         void getOwnerDashboardStats_noCompletedBookings_earningsAreZero() {
             CarOwner owner = BookingFixture.testCarOwner();
             when(vehicleRepository.countByOwnerUserIdAndIsActiveTrue(BookingFixture.OWNER_ID)).thenReturn(2L);
-            when(bookingRepository.sumEarningsForOwner(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+            when(paymentRepository.sumOwnerPayoutByStatus(BookingFixture.OWNER_ID, com.turbo.payment.model.enums.PaymentStatus.COMPLETED))
                     .thenReturn(BigDecimal.ZERO);
-            when(bookingRepository.sumEarningsForOwnerInMonth(
-                    eq(BookingFixture.OWNER_ID), eq(BookingStatus.COMPLETED),
+            when(paymentRepository.sumOwnerPayoutInRange(
+                    eq(BookingFixture.OWNER_ID),
                     any(LocalDateTime.class), any(LocalDateTime.class)))
                     .thenReturn(BigDecimal.ZERO);
-            when(bookingRepository.countByVehicleOwnerAndStatus(BookingFixture.OWNER_ID, BookingStatus.COMPLETED))
+            when(paymentRepository.countByOwnerAndStatus(BookingFixture.OWNER_ID, com.turbo.payment.model.enums.PaymentStatus.COMPLETED))
                     .thenReturn(0L);
             when(carOwnerRepository.findById(BookingFixture.OWNER_ID))
                     .thenReturn(Optional.of(owner));

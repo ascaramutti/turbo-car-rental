@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
+import jakarta.validation.ConstraintViolationException;
+
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
@@ -54,6 +56,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
         return buildErrorResponse(BAD_CREDENTIALS_CODE, BAD_CREDENTIALS_MESSAGE, HttpStatus.UNAUTHORIZED);
+    }
+
+    /** Handles @Validated constraint violations on @RequestParam / @PathVariable. */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        return buildErrorResponse(VALIDATION_ERROR_CODE, ex.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
     /** Handles file upload size exceeded (Spring multipart limit). */

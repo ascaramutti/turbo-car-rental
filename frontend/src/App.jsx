@@ -22,6 +22,7 @@ import DriverBookingDetailPage from './modules/booking/pages/DriverBookingDetail
 import OwnerDashboardPage from './modules/booking/pages/OwnerDashboardPage';
 import OwnerBookingsPage from './modules/booking/pages/OwnerBookingsPage';
 import OwnerBookingDetailPage from './modules/booking/pages/OwnerBookingDetailPage';
+import OwnerEarningsPage from './modules/booking/pages/OwnerEarningsPage';
 import AdminBookingsPage from './modules/booking/pages/AdminBookingsPage';
 import AdminBookingDetailPage from './modules/booking/pages/AdminBookingDetailPage';
 
@@ -170,6 +171,17 @@ export default function App() {
               <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
                 <DashboardLayout>
                   <OwnerBookingDetailPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/owner/earnings"
+            element={
+              <ProtectedRoute allowedRoles={[USER_ROLES.CAR_OWNER]}>
+                <DashboardLayout>
+                  <OwnerEarningsPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }
