@@ -6,6 +6,16 @@ import VehicleDetailPage from '../pages/VehicleDetailPage';
 import * as vehicleApi from '../api/vehicleApi';
 
 vi.mock('../api/vehicleApi');
+vi.mock('../../booking/components/LocationPicker', () => ({
+  default: ({ onLocationSelect }) => (
+    <button type="button" onClick={() => onLocationSelect?.(49.2827, -123.1207)}>
+      Mock Location Picker
+    </button>
+  ),
+}));
+vi.mock('../../booking/utils/geocoder.js', () => ({
+  reverseGeocode: vi.fn().mockResolvedValue('Downtown Edmonton'),
+}));
 vi.mock('react-pdf', () => ({
   Document: ({ children }) => <div>{children}</div>,
   Page: () => <div />,
@@ -323,12 +333,15 @@ describe('VehicleDetailPage', () => {
     await user.type(datetimeInput, futureDate);
 
     const locationInput = screen.getByPlaceholderText('e.g. Downtown Edmonton');
+    await user.clear(locationInput);
     await user.type(locationInput, 'Downtown Edmonton');
 
     const latInput = screen.getByPlaceholderText('e.g. 49.2827');
+    await user.clear(latInput);
     await user.type(latInput, '49.2827');
 
     const lngInput = screen.getByPlaceholderText('e.g. -123.1207');
+    await user.clear(lngInput);
     await user.type(lngInput, '-123.1207');
 
     const rateInput = document.querySelector('input[name="hourlyRate"]');
@@ -397,12 +410,15 @@ describe('VehicleDetailPage', () => {
     await user.type(datetimeInput, futureDate);
 
     const locationInput = screen.getByPlaceholderText('e.g. Downtown Edmonton');
+    await user.clear(locationInput);
     await user.type(locationInput, 'Downtown Edmonton');
 
     const latInput = screen.getByPlaceholderText('e.g. 49.2827');
+    await user.clear(latInput);
     await user.type(latInput, '49.2827');
 
     const lngInput = screen.getByPlaceholderText('e.g. -123.1207');
+    await user.clear(lngInput);
     await user.type(lngInput, '-123.1207');
 
     const rateInput = document.querySelector('input[name="hourlyRate"]');

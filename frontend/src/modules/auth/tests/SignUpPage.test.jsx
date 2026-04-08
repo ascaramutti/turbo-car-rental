@@ -8,7 +8,7 @@ describe('SignUpPage', () => {
   it('renders the sign up form with all fields', () => {
     renderWithProviders(<SignUpPage />);
 
-    expect(screen.getByText('JOIN TURBO!')).toBeInTheDocument();
+    expect(screen.getByText('JOIN US!')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('First Name')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Last Name')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();

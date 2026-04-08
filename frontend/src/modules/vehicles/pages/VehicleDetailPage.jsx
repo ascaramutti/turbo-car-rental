@@ -10,6 +10,8 @@ import {
   getVehicleDocuments,
 } from '../api/vehicleApi';
 import { extractErrorMessage } from '../../auth/utils/validation';
+import LocationPicker from '../../booking/components/LocationPicker';
+import { reverseGeocode } from '../../booking/utils/geocoder.js';
 import { validateActivateForm } from '../utils/vehicleValidation';
 import VehicleForm from '../components/VehicleForm';
 import VehicleDocumentCard from '../components/VehicleDocumentCard';
@@ -65,6 +67,10 @@ export default function VehicleDetailPage() {
     try {
       const { data } = await getVehicleById(id);
       setVehicle(data);
+      setActivateLocation(data.generalLocation ?? '');
+      setActivateLatitude(data.latitude != null ? String(data.latitude) : '');
+      setActivateLongitude(data.longitude != null ? String(data.longitude) : '');
+      setActivateHourlyRate(data.hourlyRate != null ? String(data.hourlyRate) : '');
     } catch (err) {
       toast.error(extractErrorMessage(err));
       navigate('/owner/vehicles');
@@ -135,6 +141,19 @@ export default function VehicleDetailPage() {
       setIsActivating(false);
     }
   };
+
+  /** Syncs activation coordinates and best-effort general location from map selection. */
+  const handleActivateLocationSelect = useCallback(async (latitude, longitude) => {
+    setActivateLatitude(String(latitude));
+    setActivateLongitude(String(longitude));
+
+    try {
+      const formattedLocation = await reverseGeocode(latitude, longitude);
+      setActivateLocation(formattedLocation);
+    } catch {
+      // Keep manual location editing available if reverse geocoding fails.
+    }
+  }, []);
 
   /** Removes the vehicle from rent listings. */
   const handleDeactivate = async () => {
@@ -329,6 +348,17 @@ export default function VehicleDetailPage() {
                           className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm"
                         />
                       </div>
+                    </div>
+                    <div className="rounded-xl border-2 border-gray-200 p-3">
+                      <p className="text-xs font-semibold text-text-dark mb-2">Vehicle Pickup Area</p>
+                      <LocationPicker
+                        onLocationSelect={handleActivateLocationSelect}
+                        initialLat={activateLatitude}
+                        initialLon={activateLongitude}
+                        heightClassName="h-64"
+                        helperText="Search an address, click the map, or drag the marker to place your vehicle."
+                        addressPlaceholder="Search vehicle pickup area"
+                      />
                     </div>
                     <button
                       type="button"

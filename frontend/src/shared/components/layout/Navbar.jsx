@@ -4,6 +4,7 @@ import { LogOut, Menu, X, Clock, Search, Calendar, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { USER_ROLES } from '../../constants/roles';
 import { getDriverHoursSummary } from '../../../modules/booking/api/bookingApi';
+import turboLogo from "../../../assets/turboNoName.png";
 
 /** Formats a role enum value into a readable label. */
 const formatRole = (role) => {
@@ -71,7 +72,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0">
-            <span className="text-2xl">🚗</span>
+            <img src={turboLogo} alt="Turbo Logo" className="h-15 w-auto object-contain" />
             <span className="text-xl font-extrabold text-turbo-yellow tracking-wide">
               TURBO
             </span>

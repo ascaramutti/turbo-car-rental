@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Loader2, Car, MapPin, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { searchVehicles } from '../api/bookingApi';
 import { extractErrorMessage } from '../../auth/utils/validation';
+import LocationPicker from '../components/LocationPicker';
 import VehicleSearchCard from '../components/VehicleSearchCard';
 import VehicleDetailModal from '../components/VehicleDetailModal';
 
@@ -41,8 +42,6 @@ const DEFAULT_FILTERS = {
   radiusKm: '10',
   startTime: '',
   endTime: '',
-  serviceType: '',
-  fuelType: '',
   minPrice: '',
   maxPrice: '',
 };
@@ -83,6 +82,23 @@ export default function DriverSearchPage() {
   });
   const [ownerRatingFilter, setOwnerRatingFilter] = useState(0);
 
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFilters((prev) => ({
+          ...prev,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude),
+        }));
+      },
+      () => {
+        toast.error('Unable to detect your location. Drag the map marker to choose a search area.');
+      }
+    );
+  }, []);
+
   /** Updates a text/number/select filter field. */
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -109,8 +125,8 @@ export default function DriverSearchPage() {
   };
 
   /** Validates filter values before submitting the search. */
-  const validateFilters = () => {
-    const { latitude, longitude, radiusKm, minPrice, maxPrice, startTime, endTime } = filters;
+  const validateFilters = useCallback((candidateFilters = filters) => {
+    const { latitude, longitude, radiusKm, minPrice, maxPrice, startTime, endTime } = candidateFilters;
     if (latitude !== '' && (Number(latitude) < VALIDATION.MIN_LATITUDE || Number(latitude) > VALIDATION.MAX_LATITUDE)) {
       toast.error('Latitude must be between -90 and 90');
       return false;
@@ -148,28 +164,31 @@ export default function DriverSearchPage() {
       return false;
     }
     return true;
-  };
+  }, [filters]);
 
-  /** Submits the search with current filter state. */
-  const handleApplyFilters = useCallback(async () => {
-    if (!validateFilters()) return;
+  /** Submits the search with a given filter state. */
+  const performSearch = useCallback(async (
+    nextFilters = filters,
+    nextServiceTypeChecks = serviceTypeChecks,
+    nextOwnerRatingFilter = ownerRatingFilter
+  ) => {
+    if (!validateFilters(nextFilters)) return;
 
     setIsLoading(true);
     setHasSearched(true);
 
     const params = {};
-    Object.entries(filters).forEach(([key, val]) => {
+    Object.entries(nextFilters).forEach(([key, val]) => {
       if (val !== '' && val !== null && val !== undefined) params[key] = val;
     });
 
-    // Derive serviceType from checkboxes (last checked wins; if both or none, omit)
-    const checkedTypes = SERVICE_TYPE_OPTIONS.filter((o) => serviceTypeChecks[o.value]).map((o) => o.value);
+    const checkedTypes = SERVICE_TYPE_OPTIONS.filter((option) => nextServiceTypeChecks[option.value]).map((option) => option.value);
     if (checkedTypes.length === 1) params.serviceType = checkedTypes[0];
 
     try {
       const { data } = await searchVehicles(params);
-      const filtered = ownerRatingFilter > 0
-        ? data.filter((v) => Number(v.ownerRating ?? 0) >= ownerRatingFilter)
+      const filtered = nextOwnerRatingFilter > 0
+        ? data.filter((vehicle) => Number(vehicle.ownerRating ?? 0) >= nextOwnerRatingFilter)
         : data;
       setResults(filtered);
     } catch (err) {
@@ -177,11 +196,38 @@ export default function DriverSearchPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filters, serviceTypeChecks, ownerRatingFilter]);
+  }, [filters, ownerRatingFilter, serviceTypeChecks, validateFilters]);
+
+  /** Submits the search with current filter state. */
+  const handleApplyFilters = useCallback(async () => {
+    await performSearch();
+  }, [performSearch]);
+
+  /** Updates the map-selected location and refreshes nearby vehicles. */
+  const handleMapLocationSelect = useCallback((latitude, longitude) => {
+    const nextFilters = {
+      ...filters,
+      latitude: String(latitude),
+      longitude: String(longitude),
+    };
+
+    setFilters(nextFilters);
+    void performSearch(nextFilters, serviceTypeChecks, ownerRatingFilter);
+  }, [filters, ownerRatingFilter, performSearch, serviceTypeChecks]);
 
   const nowLocal = new Date();
   const minDateTime = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}T${String(nowLocal.getHours()).padStart(2, '0')}:${String(nowLocal.getMinutes()).padStart(2, '0')}`;
   const sortedResults = sortVehicles(results, sortKey);
+  const mapMarkers = sortedResults
+    .filter((vehicle) => vehicle.maskedLatitude != null && vehicle.maskedLongitude != null)
+    .map((vehicle) => ({
+      id: vehicle.vehicleId,
+      latitude: vehicle.maskedLatitude,
+      longitude: vehicle.maskedLongitude,
+      title: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+      label: vehicle.generalLocation,
+      vehicle,
+    }));
 
   return (
     <div className="flex flex-1 min-h-0 bg-bg-light">
@@ -375,15 +421,30 @@ export default function DriverSearchPage() {
         )}
       </section>
 
-      {/* ── Right: Map Placeholder ────────────────────────────────── */}
-      <aside className="hidden lg:flex w-72 shrink-0 items-stretch">
-        <div className="flex-1 bg-accent-orange/10 border-l border-border flex flex-col items-center justify-center gap-3 p-6">
-          <div className="w-full h-full min-h-64 bg-accent-orange rounded-xl flex flex-col items-center justify-center gap-2 shadow-inner">
-            <MapPin size={36} className="text-white" />
-            <span className="text-white text-2xl font-extrabold tracking-widest">MAP</span>
-            <p className="text-white/80 text-xs text-center px-4">
-              Google Maps integration coming soon
+      {/* ── Right: Interactive Map ───────────────────────────────── */}
+      <aside className="w-full max-w-full lg:max-w-72 shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-white">
+        <div className="p-4 lg:p-5 space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-text-dark uppercase tracking-wide">Map Search</h2>
+            <p className="text-xs text-text-gray mt-1">
+              Search an address or drag the marker to update the nearby vehicle list.
             </p>
+          </div>
+
+          <LocationPicker
+            onLocationSelect={handleMapLocationSelect}
+            initialLat={filters.latitude}
+            initialLon={filters.longitude}
+            markers={mapMarkers}
+            onMarkerSelect={(marker) => setSelectedVehicle(marker.vehicle)}
+            heightClassName="h-72 lg:h-[calc(100vh-15rem)]"
+            helperText="Vehicle pins use the masked pickup area returned by the API."
+          />
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-text-gray">
+            {mapMarkers.length > 0
+              ? `${mapMarkers.length} vehicle${mapMarkers.length !== 1 ? 's' : ''} shown on the map`
+              : 'Vehicle pins will appear here after the first search.'}
           </div>
         </div>
       </aside>

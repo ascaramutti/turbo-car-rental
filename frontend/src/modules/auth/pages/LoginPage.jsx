@@ -4,6 +4,7 @@ import { useAuth } from '../context/useAuth';
 import { validateField, extractErrorMessage } from '../utils/validation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import turboLogo from "../../../assets/turboLogo.png";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -61,11 +62,8 @@ export default function LoginPage() {
     <div className="bg-bg-light flex-1 flex items-center justify-center px-4 py-12">
       <div className="bg-white rounded-2xl shadow-lg p-8 sm:p-10 w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-2">
-          <span className="text-5xl">🚗</span>
-        </div>
-        <div className="text-center mb-8">
-          <span className="text-3xl font-extrabold text-turbo-yellow tracking-wide">TURBO</span>
+        <div className="flex justify-center mb-4">
+          <img src={turboLogo} alt="Turbo Logo" className="h-40 w-auto object-contain" />
         </div>
 
         <h1 className="text-2xl font-bold text-accent-orange text-center mb-8">

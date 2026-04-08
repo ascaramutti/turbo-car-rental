@@ -10,6 +10,7 @@ import {
 } from '../utils/validation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import turboLogo from "../../../assets/turboLogo.png";
 
 const INPUT_BASE = 'w-full px-4 py-3 border-2 rounded-lg bg-bg-light focus:bg-white focus:outline-none focus:ring-2 transition-colors';
 const DATE_PLACEHOLDER = '[color-scheme:light] [&:not(:focus)]:text-gray-400';
@@ -135,11 +136,11 @@ export default function SignUpPage() {
     <div className="bg-bg-light flex-1 flex items-center justify-center px-4 py-12">
       <div className="bg-white rounded-2xl shadow-lg p-8 sm:p-10 w-full max-w-2xl">
         {/* Logo */}
-        <div className="text-center mb-2">
-          <span className="text-5xl">🚗</span>
+        <div className="flex justify-center mb-4">
+          <img src={turboLogo} alt="Turbo Logo" className="h-50 w-auto object-contain" />
         </div>
         <h1 className="text-3xl font-bold text-accent-orange text-center mb-8">
-          JOIN TURBO!
+          JOIN US!
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
