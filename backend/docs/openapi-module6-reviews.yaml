@@ -1,0 +1,189 @@
+openapi: 3.0.3
+info:
+  title: TURBO - Module 6 (Reviews)
+  description: |
+    API contract for the Reviews module of the TURBO peer-to-peer car rental platform.
+
+    ## Scope
+    This module handles **mutual reviews** between drivers and car owners after completed bookings.
+    Each booking can have up to 2 reviews: one from the driver (DRIVER_TO_OWNER) and one
+    from the owner (OWNER_TO_DRIVER).
+
+    ## Business Rules
+    - Only COMPLETED bookings can be reviewed
+    - Only the driver or vehicle owner of the booking can submit a review
+    - Each party can submit exactly one review per booking (unique constraint on booking_id + reviewer_id)
+    - Rating is required (1-5), comment is optional (max 500 chars, safe characters only)
+    - Admin cannot write reviews
+
+    ## Security
+    - All endpoints require JWT authentication
+    - `/api/bookings/{bookingId}/reviews` POST validates user is driver or owner of the booking
+    - GET endpoints are accessible to any authenticated user
+  version: 1.0.0
+  contact:
+    name: TURBO Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Reviews
+    description: Review operations — create and retrieve reviews for bookings and users
+
+paths:
+  /api/bookings/{bookingId}/reviews:
+    post:
+      tags: [Reviews]
+      summary: Submit a review for a completed booking
+      description: |
+        Creates a review for the specified booking. The system automatically determines
+        the reviewer, reviewee, and review type based on the authenticated user's role
+        in the booking.
+      operationId: createReview
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '200':
+          description: Review created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          description: Booking not completed (REV-002) or validation error
+        '403':
+          description: Not authorized to review this booking (REV-003)
+        '404':
+          description: Booking not found (REV-001)
+        '409':
+          description: Review already submitted (REV-004)
+
+    get:
+      tags: [Reviews]
+      summary: Get all reviews for a booking
+      operationId: getBookingReviews
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: List of reviews for the booking (0-2)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewResponse'
+
+  /api/users/{userId}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Get all reviews received by a user
+      operationId: getUserReviews
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: List of reviews received by the user (most recent first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CreateReviewRequest:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+          format: int64
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          maxLength: 500
+          pattern: "^[a-zA-Z0-9 .,!?'\\-()]*$"
+      required:
+        - bookingId
+        - rating
+
+    ReviewResponse:
+      type: object
+      properties:
+        reviewId:
+          type: integer
+          format: int64
+        bookingId:
+          type: integer
+          format: int64
+        vehicleId:
+          type: integer
+          format: int64
+        vehicleSummary:
+          type: string
+        reviewerUserId:
+          type: integer
+          format: int64
+        reviewerName:
+          type: string
+        revieweeUserId:
+          type: integer
+          format: int64
+        revieweeName:
+          type: string
+        reviewType:
+          type: string
+          enum: [DRIVER_TO_OWNER, OWNER_TO_DRIVER]
+        rating:
+          type: integer
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # Error Code Reference
+    # REV-001 | BOOKING_NOT_FOUND        | 404
+    # REV-002 | BOOKING_NOT_COMPLETED    | 400
+    # REV-003 | UNAUTHORIZED_REVIEW      | 403
+    # REV-004 | REVIEW_ALREADY_SUBMITTED | 409
+    # REV-005 | REVIEW_NOT_FOUND         | 404
