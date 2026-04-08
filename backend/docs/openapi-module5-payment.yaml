@@ -1,0 +1,585 @@
+openapi: 3.0.3
+info:
+  title: TURBO - Module 5 (Transaction Processor)
+  description: |
+    API contract for the Transaction Processor module of the TURBO peer-to-peer car rental platform.
+
+    ## Scope
+    This module handles **payment processing** for confirmed bookings via Stripe (Test Mode).
+    It implements the 80/20 commission split (80% owner payout, 20% platform fee), security
+    deposit collection, payment confirmation, webhook handling, and refunds on cancellation.
+
+    ## Payment Flow
+    1. Owner confirms a booking (Module 4) — booking transitions to CONFIRMED
+    2. Driver creates a payment intent via `POST /driver/bookings/{bookingId}/payments/intent`
+    3. Frontend collects card details via Stripe Elements and calls `stripe.confirmPayment()`
+    4. Frontend confirms payment on backend via `PUT /driver/bookings/{bookingId}/payments/confirm`
+    5. Stripe sends webhook events (`payment_intent.succeeded` / `payment_intent.payment_failed`)
+    6. On booking cancellation (Module 4), completed payments are automatically refunded
+
+    ## Financial Model
+    ```
+    baseAmount     = booking.totalPrice (totalHours * hourlyRate)
+    securityDeposit = $200.00 CAD (configurable)
+    platformFee    = baseAmount * 0.20  (Turbo commission)
+    ownerPayout    = baseAmount * 0.80  (car owner earnings)
+    totalCharge    = baseAmount + securityDeposit  (amount sent to Stripe)
+    ```
+    All monetary values use BigDecimal with DECIMAL(19,4) precision and HALF_UP rounding.
+
+    ## State Machine
+    ```
+    PENDING ──[Stripe succeeds / frontend confirms]──> COMPLETED
+    PENDING ──[Stripe fails]──> FAILED
+    COMPLETED ──[booking cancelled]──> REFUNDED
+    ```
+
+    ## Security
+    - `/api/driver/**` requires JWT with DRIVER authority
+    - `/api/bookings/**` requires JWT (any authenticated user — access validated in service)
+    - `/api/stripe/webhook` is publicly accessible (Stripe signature verification)
+  version: 1.0.0
+  contact:
+    name: TURBO Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://localhost/api
+    description: Docker (via nginx)
+
+tags:
+  - name: DriverPayment
+    description: Driver payment operations — create intent, confirm payment (secured by DRIVER role)
+  - name: BookingPayment
+    description: Payment retrieval — view payment for a booking (secured by JWT, driver or owner access)
+  - name: StripeWebhook
+    description: Stripe webhook handler — processes async payment events (publicly accessible, signature-verified)
+
+paths:
+  # ── Driver: Create Payment Intent ────────────────────────────────
+
+  /api/driver/bookings/{bookingId}/payments/intent:
+    post:
+      tags: [DriverPayment]
+      summary: Create a Stripe PaymentIntent for a confirmed booking
+      description: |
+        Creates a Stripe PaymentIntent for the given booking. The booking must be in
+        CONFIRMED status and belong to the authenticated driver. Returns a `clientSecret`
+        that the frontend uses with Stripe Elements to collect card details.
+
+        The payment amount is calculated as:
+        `totalCharge = booking.totalPrice + securityDeposit`
+
+        The 80/20 split is computed and stored:
+        - `platformFee = booking.totalPrice * 0.20`
+        - `ownerPayout = booking.totalPrice * 0.80`
+
+        If a PENDING payment already exists for the booking, it is updated (idempotent).
+        If the payment is already COMPLETED, returns PAY-005 conflict.
+      operationId: createPaymentIntent
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: ID of the confirmed booking
+      responses:
+        '200':
+          description: PaymentIntent created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePaymentIntentResponse'
+              example:
+                paymentId: 1
+                paymentIntentId: "pi_3ABC123def456"
+                clientSecret: "pi_3ABC123def456_secret_xyz"
+                status: "PENDING"
+                amount: "250.0000"
+                platformFee: "10.0000"
+                ownerPayout: "40.0000"
+                securityDeposit: "200.0000"
+                currency: "cad"
+        '400':
+          description: Booking is not in CONFIRMED status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-003"
+                message: "Booking is not in a confirmable state for payment"
+        '403':
+          description: Booking does not belong to the authenticated driver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-002"
+                message: "You do not have access to this payment"
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-001"
+                message: "Booking not found"
+        '409':
+          description: Payment already completed for this booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-005"
+                message: "Payment has already been completed"
+        '502':
+          description: Stripe API call failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-006"
+                message: "Failed to create Stripe payment intent"
+        '503':
+          description: Stripe is not configured on the server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-004"
+                message: "Stripe configuration is missing"
+
+  # ── Driver: Confirm Payment ──────────────────────────────────────
+
+  /api/driver/bookings/{bookingId}/payments/confirm:
+    put:
+      tags: [DriverPayment]
+      summary: Confirm payment after Stripe processes the card
+      description: |
+        Called by the frontend after `stripe.confirmPayment()` succeeds on the client side.
+        Updates the payment status from PENDING to COMPLETED. The `paymentIntentId` query
+        parameter must match the stored Stripe PaymentIntent ID.
+
+        This is a redundant confirmation — the webhook (`payment_intent.succeeded`) also
+        updates the status. The frontend call ensures immediate UI feedback.
+
+        If the payment is already COMPLETED (e.g., webhook arrived first), returns the
+        existing payment without error (idempotent).
+      operationId: confirmPayment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: ID of the booking
+        - name: paymentIntentId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Stripe PaymentIntent ID (must match stored value)
+      responses:
+        '200':
+          description: Payment confirmed (or already completed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '403':
+          description: Booking does not belong to driver OR paymentIntentId mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-002"
+                message: "You do not have access to this payment"
+        '404':
+          description: Booking or payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Shared: Get Booking Payment ──────────────────────────────────
+
+  /api/bookings/{bookingId}/payments:
+    get:
+      tags: [BookingPayment]
+      summary: Get payment details for a booking
+      description: |
+        Returns the payment record associated with a booking. Accessible by the
+        driver who created the booking OR the owner of the booked vehicle.
+      operationId: getBookingPayment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: ID of the booking
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+              example:
+                paymentId: 1
+                bookingId: 42
+                status: "COMPLETED"
+                amount: "250.0000"
+                platformFee: "10.0000"
+                ownerPayout: "40.0000"
+                securityDeposit: "200.0000"
+                currency: "cad"
+                stripePaymentIntentId: "pi_3ABC123def456"
+                createdAt: "2026-03-28T14:30:00"
+                updatedAt: "2026-03-28T14:31:15"
+        '403':
+          description: User is neither the driver nor the vehicle owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-002"
+                message: "You do not have access to this payment"
+        '404':
+          description: Booking or payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Stripe Webhook ───────────────────────────────────────────────
+
+  /api/stripe/webhook:
+    post:
+      tags: [StripeWebhook]
+      summary: Handle Stripe webhook events
+      description: |
+        Receives asynchronous payment events from Stripe. The endpoint is publicly
+        accessible (no JWT required) but validates the `Stripe-Signature` header
+        against the configured webhook secret.
+
+        Supported events:
+        - `payment_intent.succeeded` → sets payment status to COMPLETED
+        - `payment_intent.payment_failed` → sets payment status to FAILED
+        - All other event types are ignored (logged at INFO level)
+      operationId: handleStripeWebhook
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Stripe webhook signature for verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              description: Raw JSON payload from Stripe
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Webhook processed"
+        '400':
+          description: Invalid webhook signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-008"
+                message: "Invalid Stripe webhook signature"
+        '500':
+          description: Internal error processing webhook event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-009"
+                message: "Failed to process Stripe webhook event"
+        '503':
+          description: Webhook secret not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PAY-004"
+                message: "Stripe configuration is missing"
+
+  # ── Owner: Earnings ───────────────────────────────────────────────
+
+  /api/owner/earnings:
+    get:
+      tags: [OwnerEarnings]
+      summary: Get owner earnings summary from actual payments
+      description: |
+        Returns the authenticated car owner's earnings computed from the `payments` table.
+        Unlike the dashboard stats (which use `booking.totalPrice`), this endpoint uses
+        `payment.ownerPayout` (the real 80% split after platform fee deduction).
+
+        Includes a list of recent payment transactions with booking details.
+      operationId: getOwnerEarnings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Owner earnings summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerEarningsResponse'
+
+    # ── Error Code Reference (new) ─────────────────────────────────
+    # PAY-011 | OWNER_NOT_FOUND | 404 Not Found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ── Response DTOs ────────────────────────────────────────────────
+
+    CreatePaymentIntentResponse:
+      type: object
+      description: Response after creating a Stripe PaymentIntent
+      properties:
+        paymentId:
+          type: integer
+          format: int64
+          description: Internal payment record ID
+        paymentIntentId:
+          type: string
+          description: Stripe PaymentIntent ID (e.g., "pi_3ABC...")
+        clientSecret:
+          type: string
+          description: Stripe client secret — used by frontend to confirm payment via Elements
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        amount:
+          type: string
+          format: decimal
+          description: "Total charge (baseAmount + securityDeposit), DECIMAL(19,4)"
+        platformFee:
+          type: string
+          format: decimal
+          description: "Turbo platform commission (baseAmount * 0.20), DECIMAL(19,4)"
+        ownerPayout:
+          type: string
+          format: decimal
+          description: "Car owner earnings (baseAmount * 0.80), DECIMAL(19,4)"
+        securityDeposit:
+          type: string
+          format: decimal
+          description: "Security deposit amount (default 200.00 CAD), DECIMAL(19,4)"
+        currency:
+          type: string
+          description: ISO 4217 currency code (default "cad")
+          maxLength: 10
+      required:
+        - paymentId
+        - paymentIntentId
+        - clientSecret
+        - status
+        - amount
+        - platformFee
+        - ownerPayout
+        - securityDeposit
+        - currency
+
+    PaymentResponse:
+      type: object
+      description: Full payment record
+      properties:
+        paymentId:
+          type: integer
+          format: int64
+          description: Internal payment record ID
+        bookingId:
+          type: integer
+          format: int64
+          description: Associated booking ID
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        amount:
+          type: string
+          format: decimal
+          description: "Total charge (baseAmount + securityDeposit), DECIMAL(19,4)"
+        platformFee:
+          type: string
+          format: decimal
+          description: "Turbo platform commission (baseAmount * 0.20), DECIMAL(19,4)"
+        ownerPayout:
+          type: string
+          format: decimal
+          description: "Car owner earnings (baseAmount * 0.80), DECIMAL(19,4)"
+        securityDeposit:
+          type: string
+          format: decimal
+          description: "Security deposit amount, DECIMAL(19,4)"
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          maxLength: 10
+        stripePaymentIntentId:
+          type: string
+          description: Stripe PaymentIntent ID (null if not yet created)
+        createdAt:
+          type: string
+          format: date-time
+          description: When the payment record was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the payment record was last updated
+      required:
+        - paymentId
+        - bookingId
+        - status
+        - amount
+        - platformFee
+        - ownerPayout
+        - securityDeposit
+        - currency
+        - createdAt
+        - updatedAt
+
+    # ── Enums ────────────────────────────────────────────────────────
+
+    PaymentStatus:
+      type: string
+      enum:
+        - PENDING
+        - COMPLETED
+        - FAILED
+        - REFUNDED
+      description: |
+        - `PENDING` — PaymentIntent created, awaiting Stripe confirmation
+        - `COMPLETED` — Payment succeeded (card charged)
+        - `FAILED` — Stripe payment failed
+        - `REFUNDED` — Payment refunded after booking cancellation
+
+    OwnerEarningsResponse:
+      type: object
+      description: Owner earnings summary from actual payments (80% split)
+      properties:
+        totalEarnings:
+          type: string
+          format: decimal
+          description: "Sum of ownerPayout from all COMPLETED payments, DECIMAL(19,4)"
+        monthEarnings:
+          type: string
+          format: decimal
+          description: "Sum of ownerPayout from COMPLETED payments in current month"
+        pendingPayouts:
+          type: string
+          format: decimal
+          description: "Sum of ownerPayout from PENDING payments (not yet confirmed)"
+        completedPayments:
+          type: integer
+          description: Count of COMPLETED payments for this owner
+        transactions:
+          type: array
+          description: Recent payment transactions (most recent first)
+          items:
+            $ref: '#/components/schemas/EarningTransaction'
+      required:
+        - totalEarnings
+        - monthEarnings
+        - pendingPayouts
+        - completedPayments
+        - transactions
+
+    EarningTransaction:
+      type: object
+      description: A single payment transaction for the earnings history
+      properties:
+        paymentId:
+          type: integer
+          format: int64
+        bookingId:
+          type: integer
+          format: int64
+        vehicleSummary:
+          type: string
+          description: "Vehicle make + model (e.g., '2022 Toyota Camry')"
+        driverFullName:
+          type: string
+        date:
+          type: string
+          format: date-time
+          description: When the payment was created
+        grossAmount:
+          type: string
+          format: decimal
+          description: "Total booking price (before split)"
+        platformFee:
+          type: string
+          format: decimal
+          description: "Turbo platform fee (20%)"
+        ownerPayout:
+          type: string
+          format: decimal
+          description: "Owner earnings (80%)"
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+
+    # ── Error Codes ──────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+      required:
+        - code
+        - message
+
+    # ── Error Code Reference ─────────────────────────────────────────
+    # PAY-001 | BOOKING_NOT_FOUND              | 404 Not Found
+    # PAY-002 | UNAUTHORIZED_PAYMENT_ACCESS     | 403 Forbidden
+    # PAY-003 | BOOKING_NOT_CONFIRMABLE_FOR_PAYMENT | 400 Bad Request
+    # PAY-004 | STRIPE_CONFIG_MISSING           | 503 Service Unavailable
+    # PAY-005 | PAYMENT_ALREADY_COMPLETED       | 409 Conflict
+    # PAY-006 | STRIPE_PAYMENT_INTENT_FAILED    | 502 Bad Gateway
+    # PAY-007 | PAYMENT_NOT_FOUND               | 404 Not Found
+    # PAY-008 | INVALID_STRIPE_WEBHOOK_SIGNATURE | 400 Bad Request
+    # PAY-009 | STRIPE_WEBHOOK_PROCESSING_FAILED | 500 Internal Server Error
+    # PAY-010 | PAYMENT_REFUND_FAILED           | 502 Bad Gateway
