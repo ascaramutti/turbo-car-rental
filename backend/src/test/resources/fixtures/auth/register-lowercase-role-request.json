@@ -1,0 +1,16 @@
+{
+  "firstName": "Mike",
+  "lastName": "Test",
+  "email": "lower@test.com",
+  "password": "secure123",
+  "phoneNumber": "+1 604 555 0003",
+  "dateOfBirth": "1998-01-10",
+  "role": "driver",
+  "address": {
+    "streetAddress": "200 Hastings St",
+    "city": "Vancouver",
+    "province": "British Columbia",
+    "postalCode": "V6A 1P2",
+    "country": "Canada"
+  }
+}
