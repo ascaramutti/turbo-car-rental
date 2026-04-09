@@ -25,5 +25,48 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: turbo-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      # Override datasource to point to the mysql service inside the Docker network
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/turbo_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Vancouver
+      SPRING_DATASOURCE_USERNAME: turbo_user
+      SPRING_DATASOURCE_PASSWORD: turbo_pass
+      # Mail goes to MailHog service
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: 1025
+      # Align container timezone with the frontend so booking date validation matches
+      TZ: America/Vancouver
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=America/Vancouver"
+      # Stripe (test mode) — academic project, keys will be rotated after grading
+      STRIPE_SECRET_KEY: sk_test_51TGxjKF0TakR6EP5D9IQCDMHh8AbwzF9yEqedPOyrL3560YCFDjNETyt7Krs08PCk98DL2m6KIfhPz0kBsLnKa3j00n3XOFiHz
+      STRIPE_CURRENCY: cad
+    volumes:
+      - turbo-uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_STRIPE_PUBLISHABLE_KEY: pk_test_51TGxjKF0TakR6EP5LUhgKTB94F4KVEuIRpdqTwadnZCE9eMKhkakMu5HVwd7fKfhF984QhYYL4vAh5mdRM4bc1XP00ABPCjFLf
+        VITE_GOOGLE_MAPS_API_KEY: AIzaSyCtdLBV_2vhNCvgvQOi479KL06AfXwOQ0w
+    container_name: turbo-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
 volumes:
   turbo-mysql-data:
+  turbo-uploads:
