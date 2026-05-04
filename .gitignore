@@ -23,6 +23,12 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 
-# Env
+# Env / local secrets — never commit
 .env
+.env.*
+!.env.example
 *.log
+
+# Local dev configuration that contains secrets
+backend/src/main/resources/application-local.properties
+frontend/.env.local

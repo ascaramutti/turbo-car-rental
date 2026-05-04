@@ -34,14 +34,27 @@ You do **not** need Java, Node, Maven, MySQL or any other tool installed locally
 
 ---
 
-## Quick Start (one command)
+## Quick Start
 
 ```bash
 git clone https://github.com/ascaramutti/turbo-car-rental.git
 cd turbo-car-rental
 git checkout develop
+
+# 1. Configure your own API keys (Stripe + Google Maps)
+cp .env.example .env
+#    then edit .env and replace the placeholders with your test keys
+
+# 2. Boot the stack
 docker compose up --build
 ```
+
+> **Why do I need to provide my own keys?**
+> The Stripe and Google Maps keys originally used during the academic
+> project have been rotated/removed. To exercise the payment and map
+> features locally, supply your own test keys in the `.env` file.
+> See `.env.example` for the exact variable names and links to where
+> to get each key.
 
 The first build takes **5–8 minutes** (downloads base images, compiles the backend, builds the frontend bundle). Subsequent runs are nearly instant thanks to Docker layer caching.
 
@@ -134,7 +147,7 @@ docker compose up --build
 ```
 
 ### "Payment processing is not configured"
-The Stripe keys are baked into the image at build time. If you cloned and ran without `--build`, force a rebuild:
+The Stripe keys are read from your local `.env` file at build time. Make sure you copied `.env.example` to `.env` and filled in real test keys before running `docker compose up --build`. If you change the keys, force a rebuild:
 ```bash
 docker compose down
 docker compose up --build

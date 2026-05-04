@@ -15,6 +15,7 @@ info:
     - Each party can submit exactly one review per booking (unique constraint on booking_id + reviewer_id)
     - Rating is required (1-5), comment is optional (max 500 chars, safe characters only)
     - Admin cannot write reviews
+    - Review type (DRIVER_TO_OWNER or OWNER_TO_DRIVER) is determined automatically by the system
 
     ## Security
     - All endpoints require JWT authentication
@@ -27,12 +28,16 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local development
+  - url: http://localhost/api
+    description: Docker (via nginx)
 
 tags:
   - name: Reviews
     description: Review operations — create and retrieve reviews for bookings and users
 
 paths:
+  # ── Reviews by Booking ──────────────────────────────────────
+
   /api/bookings/{bookingId}/reviews:
     post:
       tags: [Reviews]
@@ -41,6 +46,15 @@ paths:
         Creates a review for the specified booking. The system automatically determines
         the reviewer, reviewee, and review type based on the authenticated user's role
         in the booking.
+
+        **Constraints:**
+        - Booking must be in COMPLETED status
+        - Authenticated user must be the driver or vehicle owner of the booking
+        - Each party can submit exactly one review per booking
+        - Rating (1-5) is required, comment is optional (max 500 chars)
+        - Admin users cannot submit reviews
+
+        Requires JWT authentication with DRIVER or CAR_OWNER role.
       operationId: createReview
       security:
         - bearerAuth: []
@@ -48,34 +62,105 @@ paths:
         - name: bookingId
           in: path
           required: true
+          description: "ID of the completed booking to review"
           schema:
             type: integer
             format: int64
+          example: 1
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateReviewRequest'
+            example:
+              bookingId: 1
+              rating: 5
+              comment: "Great experience, very professional"
       responses:
         '200':
-          description: Review created
+          description: Review created successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReviewResponse'
+              example:
+                reviewId: 1
+                bookingId: 1
+                vehicleId: 5
+                vehicleSummary: "2022 Toyota Corolla"
+                reviewerUserId: 2
+                reviewerName: "John Doe"
+                revieweeUserId: 3
+                revieweeName: "Jane Smith"
+                reviewType: "DRIVER_TO_OWNER"
+                rating: 5
+                comment: "Great experience, very professional"
+                createdAt: "2026-06-01T10:00:00"
         '400':
-          description: Booking not completed (REV-002) or validation error
+          description: Booking not completed or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                bookingNotCompleted:
+                  summary: Booking not completed (REV-002)
+                  value:
+                    code: REV-002
+                    message: "Reviews can only be submitted for completed bookings"
+                    status: 400
+                    timestamp: "2026-06-01T10:00:00.000"
+                validationError:
+                  summary: Validation failed (VALIDATION-001)
+                  value:
+                    code: VALIDATION-001
+                    message: "Validation Failed"
+                    status: 400
+                    timestamp: "2026-06-01T10:00:00.000"
+        '401':
+          description: Not authenticated
         '403':
-          description: Not authorized to review this booking (REV-003)
+          description: Not authorized to review this booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: REV-003
+                message: "You are not authorized to review this booking"
+                status: 403
+                timestamp: "2026-06-01T10:00:00.000"
         '404':
-          description: Booking not found (REV-001)
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: REV-001
+                message: "Booking not found"
+                status: 404
+                timestamp: "2026-06-01T10:00:00.000"
         '409':
-          description: Review already submitted (REV-004)
+          description: Review already submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: REV-004
+                message: "You have already submitted a review for this booking"
+                status: 409
+                timestamp: "2026-06-01T10:00:00.000"
 
     get:
       tags: [Reviews]
       summary: Get all reviews for a booking
+      description: |
+        Returns all reviews for the specified booking (0-2 reviews).
+        Results are ordered by creation date (most recent first).
+        Requires JWT authentication.
       operationId: getBookingReviews
       security:
         - bearerAuth: []
@@ -83,9 +168,11 @@ paths:
         - name: bookingId
           in: path
           required: true
+          description: "ID of the booking"
           schema:
             type: integer
             format: int64
+          example: 1
       responses:
         '200':
           description: List of reviews for the booking (0-2)
@@ -95,11 +182,44 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReviewResponse'
+              example:
+                - reviewId: 1
+                  bookingId: 1
+                  vehicleId: 5
+                  vehicleSummary: "2022 Toyota Corolla"
+                  reviewerUserId: 2
+                  reviewerName: "John Doe"
+                  revieweeUserId: 3
+                  revieweeName: "Jane Smith"
+                  reviewType: "DRIVER_TO_OWNER"
+                  rating: 5
+                  comment: "Great experience, very professional"
+                  createdAt: "2026-06-01T10:00:00"
+                - reviewId: 2
+                  bookingId: 1
+                  vehicleId: 5
+                  vehicleSummary: "2022 Toyota Corolla"
+                  reviewerUserId: 3
+                  reviewerName: "Jane Smith"
+                  revieweeUserId: 2
+                  revieweeName: "John Doe"
+                  reviewType: "OWNER_TO_DRIVER"
+                  rating: 4
+                  comment: "Good driver, returned on time"
+                  createdAt: "2026-06-01T12:00:00"
+        '401':
+          description: Not authenticated
+
+  # ── Reviews by User ──────────────────────────────────────
 
   /api/users/{userId}/reviews:
     get:
       tags: [Reviews]
       summary: Get all reviews received by a user
+      description: |
+        Returns all reviews where the specified user is the reviewee.
+        Results are ordered by creation date (most recent first).
+        Requires JWT authentication.
       operationId: getUserReviews
       security:
         - bearerAuth: []
@@ -107,9 +227,11 @@ paths:
         - name: userId
           in: path
           required: true
+          description: "ID of the user to get reviews for"
           schema:
             type: integer
             format: int64
+          example: 3
       responses:
         '200':
           description: List of reviews received by the user (most recent first)
@@ -119,6 +241,21 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReviewResponse'
+              example:
+                - reviewId: 1
+                  bookingId: 1
+                  vehicleId: 5
+                  vehicleSummary: "2022 Toyota Corolla"
+                  reviewerUserId: 2
+                  reviewerName: "John Doe"
+                  revieweeUserId: 3
+                  revieweeName: "Jane Smith"
+                  reviewType: "DRIVER_TO_OWNER"
+                  rating: 5
+                  comment: "Great experience, very professional"
+                  createdAt: "2026-06-01T10:00:00"
+        '401':
+          description: Not authenticated
 
 components:
   securitySchemes:
@@ -130,60 +267,120 @@ components:
   schemas:
     CreateReviewRequest:
       type: object
+      description: "Request body for creating a review"
       properties:
         bookingId:
           type: integer
           format: int64
+          description: "ID of the booking being reviewed"
+          example: 1
         rating:
           type: integer
           minimum: 1
           maximum: 5
+          description: "Rating from 1 (worst) to 5 (best)"
+          example: 5
         comment:
           type: string
           maxLength: 500
           pattern: "^[a-zA-Z0-9 .,!?'\\-()]*$"
+          description: "Optional review comment. Max 500 characters, safe characters only."
+          example: "Great experience, very professional"
       required:
         - bookingId
         - rating
 
     ReviewResponse:
       type: object
+      description: "Review details returned by all review endpoints"
       properties:
         reviewId:
           type: integer
           format: int64
+          description: "Unique review identifier"
+          example: 1
         bookingId:
           type: integer
           format: int64
+          description: "ID of the associated booking"
+          example: 1
         vehicleId:
           type: integer
           format: int64
+          description: "ID of the vehicle in the booking"
+          example: 5
         vehicleSummary:
           type: string
+          description: "Human-readable vehicle description (year make model)"
+          example: "2022 Toyota Corolla"
         reviewerUserId:
           type: integer
           format: int64
+          description: "ID of the user who wrote the review"
+          example: 2
         reviewerName:
           type: string
+          description: "Full name of the reviewer"
+          example: "John Doe"
         revieweeUserId:
           type: integer
           format: int64
+          description: "ID of the user being reviewed"
+          example: 3
         revieweeName:
           type: string
+          description: "Full name of the reviewee"
+          example: "Jane Smith"
         reviewType:
           type: string
           enum: [DRIVER_TO_OWNER, OWNER_TO_DRIVER]
+          description: "Direction of the review, set automatically by the system"
+          example: "DRIVER_TO_OWNER"
         rating:
           type: integer
+          minimum: 1
+          maximum: 5
+          description: "Rating from 1 to 5"
+          example: 5
         comment:
           type: string
+          description: "Optional review comment"
+          example: "Great experience, very professional"
         createdAt:
           type: string
           format: date-time
+          description: "Timestamp when the review was created"
+          example: "2026-06-01T10:00:00"
 
-    # Error Code Reference
-    # REV-001 | BOOKING_NOT_FOUND        | 404
-    # REV-002 | BOOKING_NOT_COMPLETED    | 400
-    # REV-003 | UNAUTHORIZED_REVIEW      | 403
-    # REV-004 | REVIEW_ALREADY_SUBMITTED | 409
-    # REV-005 | REVIEW_NOT_FOUND         | 404
+    ErrorResponse:
+      type: object
+      description: "Standard business error response. Used for all REV-XXX errors."
+      properties:
+        code:
+          type: string
+          description: "Error code (e.g. REV-001, REV-004)"
+          example: "REV-001"
+        message:
+          type: string
+          description: "Human-readable error message"
+          example: "Booking not found"
+        status:
+          type: integer
+          description: "HTTP status code"
+          example: 404
+        timestamp:
+          type: string
+          format: date-time
+          description: "Error timestamp (ISO-8601)"
+          example: "2026-06-01T10:00:00.000"
+
+  # ── All Error Codes — Module 6 ──────────────────────────────────
+  #
+  # Code          | Status | Message
+  # --------------|--------|--------------------------------------------------
+  # REV-001       | 404    | Booking not found
+  # REV-002       | 400    | Reviews can only be submitted for completed bookings
+  # REV-003       | 403    | You are not authorized to review this booking
+  # REV-004       | 409    | You have already submitted a review for this booking
+  # REV-005       | 404    | Review not found
+  # VALIDATION-001| 400    | Validation Failed
